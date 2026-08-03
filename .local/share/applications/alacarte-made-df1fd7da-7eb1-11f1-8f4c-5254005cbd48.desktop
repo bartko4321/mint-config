@@ -1,0 +1,14 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Type=Application
+Name=System Maintenance
+Name[pl]=Konserwacja Systemu
+Comment=System Maintenance
+Comment[pl]=Konserwacja Systemu
+Exec=bash -c "$HOME/.update.sh"
+Icon=cinnamon-panel-launcher
+Terminal=true
+PrefersNonDefaultGPU=false
+Categories=System;
+
+
