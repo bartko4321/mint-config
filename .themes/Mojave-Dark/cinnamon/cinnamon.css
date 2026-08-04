@@ -174,7 +174,7 @@ StScrollBar StButton#vhandle:active, StScrollBar StButton#hhandle:active {
 .popup-slider-menu-item,
 .slider {
   -slider-height: 4px;
-  -slider-background-color: rgba(255, 255, 255, 0.12);
+  -slider-background-color: rgba(30, 30, 30, 0.75);
   -slider-border-color: rgba(0, 0, 0, 0);
   -slider-active-background-color: #315bef;
   -slider-active-border-color: rgba(0, 0, 0, 0);
@@ -294,7 +294,9 @@ StScrollBar StButton#vhandle:active, StScrollBar StButton#hhandle:active {
 .popup-combo-menu {
   padding: 4px 4px 6px 4px;
   color: #dedede;
-  border-image: url("assets/menu.svg") 15 15 15 15;
+  border-image: none; /* Wyłączamy wczytywanie pliku assets/menu.svg */
+  background-color: rgba(36, 36, 36, 0.75); /* 0.75 to poziom przezroczystości */
+  border-radius: 5px; /* Dodatkowe zaokrąglenie rogów */
 }
 
 .menu-arrow,
@@ -443,7 +445,7 @@ StScrollBar StButton#vhandle:active, StScrollBar StButton#hhandle:active {
 
 #panel:highlight {
   border-image: none;
-  background-color: rgba(252, 65, 56, 0.5);
+  background-color: rgba(0, 0, 0, 0.3);
 }
 
 #panelLeft {
