@@ -23,6 +23,56 @@ trap 'log_err "Błąd w linii $LINENO. Polecenie: $BASH_COMMAND"' ERR
 # --- Zmienna lokalizująca folder ze skryptem (niezależnie skąd jest uruchamiany) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
+# --- Odporne "apt-get update" ---
+# Jeśli w /etc/apt/sources.list.d/ zostały martwe wpisy PPA (np. po
+# przerwanym wcześniejszym uruchomieniu tego skryptu, albo PPA które nie ma
+# jeszcze wydania dla bieżącego OS_CODENAME), zwykłe "apt-get update"
+# zwraca błąd i - przez set -e/trap - ubija cały skrypt, mimo że reszta
+# repozytoriów (główne Mint/Ubuntu itd.) zaktualizowała się poprawnie.
+# Ta funkcja: próbuje update, a jeśli się nie powiedzie - wyłuskuje z komunikatów
+# błędów adresy zepsutych repozytoriów, usuwa odpowiadające im pliki .list/.sources
+# i ponawia update.
+safe_apt_update() {
+    local out rc
+    set +e
+    out=$(sudo apt-get update -yq 2>&1)
+    rc=$?
+    set -e
+    echo "$out"
+    [[ $rc -eq 0 ]] && return 0
+
+    log_warn "apt-get update napotkało błędy — próbuję zidentyfikować i usunąć zepsute repozytoria..."
+    local broken_urls
+    broken_urls=$(echo "$out" | grep -oP '(?:Błąd|Err):[0-9]+ \Khttps?://\S+' | sort -u)
+    local removed=0
+    while IFS= read -r url; do
+        [[ -z "$url" ]] && continue
+        local host_path="${url#http://}"
+        host_path="${host_path#https://}"
+        for f in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            [[ -f "$f" ]] || continue
+            if grep -qF "$host_path" "$f" 2>/dev/null; then
+                log_warn "Usuwam zepsute repozytorium: $f ($url)"
+                sudo rm -f "$f"
+                removed=1
+            fi
+        done
+    done <<< "$broken_urls"
+
+    if [[ $removed -eq 1 ]]; then
+        wait_for_apt
+        if sudo apt-get update -yq; then
+            return 0
+        else
+            log_warn "apt-get update nadal zwraca błędy po usunięciu zepsutych repozytoriów — kontynuuję mimo to"
+            return 0
+        fi
+    else
+        log_warn "Nie udało się automatycznie zidentyfikować zepsutych repozytoriów — kontynuuję mimo błędów update"
+        return 0
+    fi
+}
+
 # --- Funkcja zapobiegająca blokadom APT ---
 wait_for_apt() {
     log_info "Zatrzymywanie PackageKit i oczekiwanie na zwolnienie blokad APT..."
@@ -33,6 +83,44 @@ wait_for_apt() {
           sudo killall -0 apt apt-get dpkg 2>/dev/null; do
         sleep 3
     done
+}
+
+# --- Bezpieczne dodawanie PPA + instalacja pakietów ---
+# Jeśli dane PPA nie ma jeszcze wydania dla bieżącego OS_CODENAME (np. bardzo
+# świeży release bazowego Ubuntu), "apt-get update" zwróci 404. add-apt-repository samo
+# w sobie kończy się sukcesem (tylko dodaje wpis), więc błąd wychodzi dopiero
+# przy update — dlatego łapiemy go tutaj, usuwamy PPA i jedziemy dalej,
+# zamiast pozwolić, by set -e/trap ubiło cały skrypt.
+add_ppa_and_install() {
+    local ppa="$1"; shift
+    local packages=("$@")
+
+    if ! command -v add-apt-repository &>/dev/null; then
+        log_warn "add-apt-repository niedostępne — pomijam PPA $ppa"
+        return 1
+    fi
+
+    if ! sudo add-apt-repository -y "ppa:$ppa" 2>/dev/null; then
+        log_warn "Nie udało się dodać PPA $ppa — pomijam"
+        return 1
+    fi
+
+    wait_for_apt
+    if sudo apt-get update -yq; then
+        if sudo apt-get install -yq "${packages[@]}"; then
+            log_ok "Zainstalowano ${packages[*]} (PPA $ppa)"
+            return 0
+        else
+            log_warn "Instalacja ${packages[*]} z PPA $ppa nie powiodła się"
+            return 1
+        fi
+    else
+        log_warn "PPA $ppa nie ma jeszcze wydania dla '$OS_CODENAME' (404) — usuwam PPA i pomijam"
+        sudo add-apt-repository --remove -y "ppa:$ppa" 2>/dev/null || true
+        wait_for_apt
+        sudo apt-get update -yq || true
+        return 1
+    fi
 }
 
 # --- Zmienne globalne ---
@@ -89,7 +177,7 @@ fi
 
 # Narzędzia potrzebne do konfiguracji kluczy GPG i wykrywania GPU
 wait_for_apt
-sudo apt-get update -yq
+safe_apt_update
 sudo apt-get install -yq curl wget gnupg pciutils
 
 # Utworzenie zalecanego katalogu na klucze i wymuszenie dostępu (755)
@@ -135,7 +223,8 @@ sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources \
     https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
 
 wait_for_apt
-sudo apt-get update -yq && sudo apt-get upgrade -yq
+safe_apt_update
+sudo apt-get upgrade -yq
 
 # ==========================================================
 # 3. INSTALACJA PAKIETÓW
@@ -199,48 +288,17 @@ fi
 
 # Telegram Desktop — z PPA atareao
 log_info "Dodawanie PPA atareao/telegram..."
-if command -v add-apt-repository &>/dev/null \
-    && sudo add-apt-repository -y ppa:atareao/telegram 2>/dev/null; then
-    wait_for_apt
-    sudo apt-get update -yq
-    if sudo apt-get install -yq telegram; then
-        log_ok "Zainstalowano Telegram (PPA atareao)"
-    else
-        log_warn "Instalacja Telegrama z PPA nie powiodła się"
-    fi
-else
-    log_warn "Nie udało się dodać PPA atareao/telegram — pomijam telegram"
-fi
+add_ppa_and_install "atareao/telegram" telegram || true
 
 # Fastfetch — z PPA zhangsongcui3371/fastfetch
 log_info "Dodawanie PPA zhangsongcui3371/fastfetch..."
-if command -v add-apt-repository &>/dev/null \
-    && sudo add-apt-repository -y ppa:zhangsongcui3371/fastfetch 2>/dev/null; then
-    wait_for_apt
-    sudo apt-get update -yq
-    if sudo apt-get install -yq fastfetch; then
-        log_ok "Zainstalowano fastfetch (PPA zhangsongcui3371)"
-    else
-        log_warn "Instalacja fastfetch z PPA nie powiodła się"
-    fi
-else
-    log_warn "Nie udało się dodać PPA zhangsongcui3371/fastfetch — pomijam fastfetch"
-fi
+add_ppa_and_install "zhangsongcui3371/fastfetch" fastfetch || true
 
 # HandBrake — z PPA stebbins/handbrake-releases (najnowsza wersja);
 # w razie niepowodzenia instalujemy wersję z domyślnych repo (universe)
 log_info "Dodawanie PPA stebbins/handbrake-releases..."
-if command -v add-apt-repository &>/dev/null \
-    && sudo add-apt-repository -y ppa:stebbins/handbrake-releases 2>/dev/null; then
-    wait_for_apt
-    sudo apt-get update -yq
-    if sudo apt-get install -yq handbrake handbrake-cli; then
-        log_ok "Zainstalowano HandBrake (PPA stebbins)"
-    else
-        log_warn "Instalacja HandBrake z PPA nie powiodła się"
-    fi
-else
-    log_warn "Nie udało się dodać PPA stebbins/handbrake-releases — próbuję wersję z universe"
+if ! add_ppa_and_install "stebbins/handbrake-releases" handbrake handbrake-cli; then
+    log_warn "PPA stebbins/handbrake-releases niedostępne — próbuję wersję z universe"
     wait_for_apt
     sudo apt-get install -yq handbrake handbrake-cli \
         || log_warn "Instalacja HandBrake nie powiodła się"
@@ -249,18 +307,7 @@ fi
 # CDEmu (cdemu-daemon, cdemu-client) — niedostępne w domyślnych repo,
 # wymaga PPA cdemu/ppa
 log_info "Dodawanie PPA cdemu/ppa..."
-if command -v add-apt-repository &>/dev/null \
-    && sudo add-apt-repository -y ppa:cdemu/ppa 2>/dev/null; then
-    wait_for_apt
-    sudo apt-get update -yq
-    if sudo apt-get install -yq cdemu-daemon cdemu-client; then
-        log_ok "Zainstalowano CDEmu (PPA cdemu/ppa)"
-    else
-        log_warn "Instalacja CDEmu z PPA nie powiodła się"
-    fi
-else
-    log_warn "Nie udało się dodać PPA cdemu/ppa — pomijam CDEmu"
-fi
+add_ppa_and_install "cdemu/ppa" cdemu-daemon cdemu-client || true
 
 # Flatseal — dostępny wyłącznie jako Flatpak
 if command -v flatpak &>/dev/null; then
@@ -355,17 +402,8 @@ if [[ -n "$LSFG_VK_URL" ]]; then download_deb "ls-fg-vk" "$LSFG_VK_URL" "$DEB_DI
 
 # Faugus Launcher — z PPA faugus/faugus-launcher
 log_info "Dodawanie PPA faugus/faugus-launcher..."
-if command -v add-apt-repository &>/dev/null \
-    && sudo add-apt-repository -y ppa:faugus/faugus-launcher 2>/dev/null; then
-    wait_for_apt
-    sudo apt-get update -yq
-    if sudo apt-get install -yq faugus-launcher; then
-        log_ok "Zainstalowano Faugus Launcher (PPA faugus)"
-    else
-        log_warn "Instalacja Faugus Launcher z PPA nie powiodła się"
-    fi
-else
-    log_warn "Nie udało się dodać PPA faugus/faugus-launcher — pomijam Faugus Launcher"
+if ! add_ppa_and_install "faugus/faugus-launcher" faugus-launcher; then
+    log_warn "Nie udało się zainstalować Faugus Launcher z PPA — pomijam"
 fi
 
 shopt -s nullglob
