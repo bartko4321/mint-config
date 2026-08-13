@@ -2,7 +2,6 @@
 
 An automated, powerful Bash script designed to transform a clean **Linux Mint** installation with the **Cinnamon** desktop into a complete, optimized workstation ready for both work and entertainment.
 
-> ⚠️ **Note:** At the end of its execution, the script automatically restarts the system to apply all changes (including kernel modules and Plymouth configuration).
 
 ---
 
