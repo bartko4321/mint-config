@@ -519,4 +519,18 @@ if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
     sleep 2
 fi
 
+# ==========================================================
+# 4. ZAKOŃCZENIE I SPRZĄTANIE
+# ==========================================================
+sudo rm -f /etc/sudoers.d/99-temp-installer
+
+show_progress 12 $TOTAL_STEPS "$MSG_PHASE_3"
+echo -e "\n" >&3
+
+if [[ "$SCRIPT_LANG" == "pl" ]]; then
+    echo -e "${SUCCESS}✔ KONFIGURACJA ZAKOŃCZONA SUKCESEM!${NC}" >&3
+else
+    echo -e "${SUCCESS}✔ CONFIGURATION COMPLETED SUCCESSFULLY!${NC}" >&3
+fi
+
 systemctl reboot
