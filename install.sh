@@ -34,8 +34,15 @@ LOG_FILE="$HOME/install_error_$(date +%Y%m%d_%H%M%S).log"
 exec 3>&1
 exec >>"$TMP_LOG" 2>&1
 
+# Wyłączamy zawijanie linii w terminalu na czas działania skryptu.
+# Bez tego zbyt długa linia paska postępu (pasek + komunikat) zawija się
+# na dwa wiersze terminala, a \r\033[K czyści tylko ten, na którym stoi
+# kursor — w efekcie na ekranie zostają "resztki" poprzedniego komunikatu.
+printf '\033[?7l' >&3
+
 cleanup_on_exit() {
     local exit_code=$?
+    printf '\033[?7h' >&3   # z powrotem włączamy zawijanie linii
     if [ "$exit_code" -ne 0 ]; then
         echo -e "\n" >&3
         cp -f "$TMP_LOG" "$LOG_FILE" 2>/dev/null || true
@@ -63,8 +70,32 @@ show_progress() {
     local total=$2
     local msg=$3
     local percent=$(( step * 100 / total ))
-    local filled=$(( percent / 2 ))
-    local empty=$(( 50 - filled ))
+
+    # Szerokość terminala (fallback 80, gdyby tput się nie powiódł)
+    local cols
+    cols=$(tput cols 2>/dev/null)
+    [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+
+    # Pasek ma maks. 50 znaków, ale kurczy się, jeśli terminal jest węższy.
+    local bar_width=50
+    local reserved=12   # "[" + "]" + " 100% | " + margines bezpieczeństwa
+    if (( cols - reserved < bar_width )); then
+        bar_width=$(( cols - reserved ))
+        (( bar_width < 10 )) && bar_width=10
+    fi
+
+    # Komunikat obcinamy tak, by cała linia zmieściła się w jednym wierszu
+    # terminala — dzięki temu \r\033[K zawsze czyści CAŁĄ poprzednią treść,
+    # zamiast zostawiać resztki po zawiniętej linii.
+    local overhead=$(( bar_width + reserved ))
+    local avail=$(( cols - overhead ))
+    if (( avail < 5 )); then avail=5; fi
+    if (( ${#msg} > avail )); then
+        msg="${msg:0:$((avail - 1))}…"
+    fi
+
+    local filled=$(( percent * bar_width / 100 ))
+    local empty=$(( bar_width - filled ))
 
     local bar_filled=""
     local bar_empty=""
