@@ -3,7 +3,7 @@
 # KOMPLEKSOWY SKRYPT KONFIGURACYJNY SYSTEMU (CINNAMON + LINUX MINT)
 # ==========================================================
 
-set -euo pipefail
+set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 detect_system_lang() {
@@ -226,13 +226,24 @@ sudo mkdir -p /usr/share/keyrings
 sudo rm -f /usr/share/keyrings/brave-browser-archive-keyring.gpg
 BRAVE_KEY_ID="0686B78420038257"
 BRAVE_GNUPGHOME="$(mktemp -d)"
-if ! gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$BRAVE_KEY_ID"; then
-    gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keys.openpgp.org --recv-keys "$BRAVE_KEY_ID" || true
+BRAVE_KEY_OK=0
+if gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$BRAVE_KEY_ID" \
+    || gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keys.openpgp.org --recv-keys "$BRAVE_KEY_ID"; then
+    if gpg --homedir "$BRAVE_GNUPGHOME" --export "$BRAVE_KEY_ID" | sudo tee /usr/share/keyrings/brave-browser-archive-keyring.gpg > /dev/null \
+        && [[ -s /usr/share/keyrings/brave-browser-archive-keyring.gpg ]]; then
+        BRAVE_KEY_OK=1
+    fi
 fi
-gpg --homedir "$BRAVE_GNUPGHOME" --export "$BRAVE_KEY_ID" | sudo tee /usr/share/keyrings/brave-browser-archive-keyring.gpg > /dev/null
 rm -rf "$BRAVE_GNUPGHOME"
-sudo chmod 644 /usr/share/keyrings/brave-browser-archive-keyring.gpg
-sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+
+if [[ "$BRAVE_KEY_OK" -eq 1 ]]; then
+    sudo chmod 644 /usr/share/keyrings/brave-browser-archive-keyring.gpg
+    sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+else
+    sudo rm -f /usr/share/keyrings/brave-browser-archive-keyring.gpg
+    log_warn "Nie udało się pobrać klucza GPG Brave – pomijam dodanie repozytorium Brave." \
+             "Could not fetch the Brave GPG key – skipping the Brave repository."
+fi
 
 wait_for_apt
 safe_apt_update
@@ -270,7 +281,20 @@ PACKAGES_INSTALL=(
     gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
     zsh zsh-syntax-highlighting zsh-autosuggestions
 )
-sudo apt-get install -yq "${PACKAGES_INSTALL[@]}"
+if ! sudo apt-get install -yq "${PACKAGES_INSTALL[@]}"; then
+    log_warn "Instalacja zbiorcza pakietów nie powiodła się - próbuję pojedynczo, aby pominąć tylko wadliwe pakiety." \
+             "Bulk package install failed - retrying one by one to skip only the broken packages."
+    FAILED_PACKAGES=()
+    for pkg in "${PACKAGES_INSTALL[@]}"; do
+        if ! sudo apt-get install -yq "$pkg" > /tmp/install-"$pkg".log 2>&1; then
+            FAILED_PACKAGES+=("$pkg")
+        fi
+    done
+    if [[ ${#FAILED_PACKAGES[@]} -gt 0 ]]; then
+        log_warn "Nie udało się zainstalować: ${FAILED_PACKAGES[*]}. Logi w /tmp/install-<pakiet>.log" \
+                 "Failed to install: ${FAILED_PACKAGES[*]}. Logs in /tmp/install-<package>.log"
+    fi
+fi
 
 show_progress 5 $TOTAL_STEPS "$MSG_PHASE_2"
 
@@ -377,6 +401,14 @@ if command -v ufw &>/dev/null || [[ -x /usr/sbin/ufw ]]; then
     sudo ufw allow in  on virbr0
     sudo ufw allow out on virbr0
     sudo ufw allow from 192.168.122.0/24
+    # Nie blokuj samych siebie: jeśli działa sshd, port SSH musi zostać otwarty PRZED włączeniem firewalla
+    if command -v sshd &>/dev/null || systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
+        sudo ufw allow ssh
+    fi
+    if [[ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]]; then
+        log_warn "Wykryto aktywną sesję SSH - upewniono się, że port SSH zostanie otwarty przed włączeniem ufw." \
+                 "Active SSH session detected - made sure the SSH port stays open before enabling ufw."
+    fi
     sudo ufw --force enable
 fi
 
@@ -461,8 +493,16 @@ show_progress 10 $TOTAL_STEPS "$MSG_PHASE_3"
 
 ACTIVE_CONN=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | grep -v "^lo" | head -n 1 | cut -d: -f1 || true)
 if [[ -n "$ACTIVE_CONN" ]]; then
-    sudo nmcli connection modify "$ACTIVE_CONN" ipv4.dns "1.1.1.1,1.0.0.1" ipv6.dns "2606:4700:4700::1112,2606:4700:4700::1002"
-    sudo nmcli connection up "$ACTIVE_CONN" || true
+    if sudo nmcli connection modify "$ACTIVE_CONN" ipv4.dns "1.1.1.1,1.0.0.1" ipv6.dns "2606:4700:4700::1112,2606:4700:4700::1002"; then
+        sudo nmcli connection up "$ACTIVE_CONN" || true
+        # Kolejne kroki (curl/git dla zsh) potrzebują działającej sieci - poczekaj, aż DNS znów odpowiada
+        for i in {1..10}; do
+            getent hosts github.com &>/dev/null && break
+            sleep 1
+        done
+    else
+        log_warn "Nie udało się zmienić DNS dla połączenia $ACTIVE_CONN." "Failed to change DNS for connection $ACTIVE_CONN."
+    fi
 fi
 
 if command -v zsh &>/dev/null; then
