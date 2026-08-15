@@ -109,6 +109,11 @@ DEB_DIR="/tmp/debs_$$"
 
 source /etc/os-release
 OS_CODENAME="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
+echo "Wykryty system: ${PRETTY_NAME:-nieznany}, codename: ${OS_CODENAME:-nieznany}"
+if [[ -z "$OS_CODENAME" ]]; then
+    log_warn "Nie udało się wykryć nazwy kodowej dystrybucji (codename) - repozytoria PPA dodawane w dalszej części skryptu mogą nie działać poprawnie." \
+             "Could not detect the distribution codename - PPAs added later in the script may not work correctly."
+fi
 
 if [[ "$EUID" -eq 0 ]]; then
     if [[ "$SCRIPT_LANG" == "pl" ]]; then
@@ -120,7 +125,20 @@ if [[ "$EUID" -eq 0 ]]; then
 fi
 
 sudo -v
-echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-temp-installer > /dev/null
+SUDOERS_TMP="$(mktemp)"
+echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" > "$SUDOERS_TMP"
+if sudo visudo -cf "$SUDOERS_TMP"; then
+    sudo install -m 0440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/99-temp-installer
+else
+    rm -f "$SUDOERS_TMP"
+    if [[ "$SCRIPT_LANG" == "pl" ]]; then
+        echo -e "${ERROR}✖ Nieprawidłowa składnia reguły sudoers - przerywam.${NC}" >&3
+    else
+        echo -e "${ERROR}✖ Invalid sudoers rule syntax - aborting.${NC}" >&3
+    fi
+    exit 1
+fi
+rm -f "$SUDOERS_TMP"
 
 safe_apt_update() {
     local out rc
@@ -131,8 +149,12 @@ safe_apt_update() {
     echo "$out"
     [[ $rc -eq 0 ]] && return 0
 
+    # Wzorzec obejmuje PL/EN ("Błąd"/"Err") oraz uniwersalny fallback niezależny od LANG/LC_ALL
+    # apt zawsze poprzedza URL numerem błędu i dwukropkiem, niezależnie od języka komunikatu.
     local broken_urls
-    broken_urls=$(echo "$out" | grep -oP '(?:Błąd|Err):[0-9]+ \Khttps?://\S+' | sort -u)
+    broken_urls=$(echo "$out" | grep -oP '(?:Błąd|Err|Fehler|Erreur|Errore|Erro):[0-9]+ \Khttps?://\S+')
+    broken_urls+=$'\n'"$(echo "$out" | grep -oP '^\S+:[0-9]+ \Khttps?://\S+(?= )')"
+    broken_urls=$(echo "$broken_urls" | sort -u | grep -v '^$' || true)
     local removed=0
     while IFS= read -r url; do
         [[ -z "$url" ]] && continue
@@ -173,18 +195,14 @@ add_ppa_and_install() {
     if ! sudo add-apt-repository -y "ppa:$ppa" 2>/dev/null; then return 1; fi
 
     wait_for_apt
-    if sudo apt-get update -yq; then
-        if sudo apt-get install -yq "${packages[@]}"; then
-            return 0
-        else
-            return 1
-        fi
-    else
-        sudo add-apt-repository --remove -y "ppa:$ppa" 2>/dev/null || true
-        wait_for_apt
-        sudo apt-get update -yq || true
-        return 1
+    if sudo apt-get update -yq && sudo apt-get install -yq "${packages[@]}"; then
+        return 0
     fi
+
+    sudo add-apt-repository --remove -y "ppa:$ppa" 2>/dev/null || true
+    wait_for_apt
+    sudo apt-get update -yq || true
+    return 1
 }
 
 # ==========================================================
@@ -247,12 +265,13 @@ fi
 
 wait_for_apt
 safe_apt_update
-sudo apt-get upgrade -yq
+sudo apt-get upgrade -yq || log_warn "Pełna aktualizacja systemu (apt-get upgrade) nie w pełni się powiodła - kontynuuję." \
+                                       "Full system upgrade (apt-get upgrade) did not fully succeed - continuing."
 
 show_progress 3 $TOTAL_STEPS "$MSG_PHASE_1"
 
 wait_for_apt
-sudo apt-get install -yq linux-firmware
+sudo apt-get install -yq linux-firmware || log_warn "Nie udało się zainstalować linux-firmware." "Failed to install linux-firmware."
 
 PACKAGES_REMOVE=()
 if [[ ${#PACKAGES_REMOVE[@]} -gt 0 ]]; then
@@ -319,30 +338,46 @@ fi
 show_progress 6 $TOTAL_STEPS "$MSG_PHASE_2"
 
 wait_for_apt
-sudo apt-get install -yq wine wine64
+sudo apt-get install -yq wine wine64 || log_warn "Nie udało się zainstalować wine/wine64." "Failed to install wine/wine64."
 
 VGA_INFO=$(lspci -nn | grep -iE "VGA|3D|Display" || true)
 MODULES_FILE="/etc/initramfs-tools/modules"
 add_module() { grep -q "^$1" "$MODULES_FILE" || echo "$1" | sudo tee -a "$MODULES_FILE" > /dev/null; }
 
+# Wykrywanie niezależne dla każdego dostawcy - obsługuje też układy hybrydowe (np. laptop Intel+NVIDIA)
+HAS_NVIDIA=0; HAS_AMD=0; HAS_INTEL=0
+echo "$VGA_INFO" | grep -iq "NVIDIA" && HAS_NVIDIA=1
+echo "$VGA_INFO" | grep -iq "AMD"    && HAS_AMD=1
+echo "$VGA_INFO" | grep -iq "Intel"  && HAS_INTEL=1
+
 wait_for_apt
-if echo "$VGA_INFO" | grep -iq "NVIDIA"; then
-    sudo apt-get install -yq libnvidia-gl-nvidia-current:i386 2>/dev/null || sudo apt-get install -yq libgl1-nvidia-glvnd-glx:i386 2>/dev/null || true
+
+# Mesa/Vulkan: potrzebne dla AMD/Intela, oraz jako baza gdy nic nie wykryto
+if [[ "$HAS_AMD" -eq 1 || "$HAS_INTEL" -eq 1 || ( "$HAS_NVIDIA" -eq 0 && "$HAS_AMD" -eq 0 && "$HAS_INTEL" -eq 0 ) ]]; then
+    sudo apt-get install -yq libgl1-mesa-dri:i386 mesa-vulkan-drivers:i386 || true
+fi
+[[ "$HAS_AMD" -eq 1 ]]   && add_module "amdgpu"
+[[ "$HAS_INTEL" -eq 1 ]] && add_module "i915"
+
+if [[ "$HAS_NVIDIA" -eq 1 ]]; then
+    # Nazwa pakietu 32-bit zależy od zainstalowanej wersji sterownika (np. libnvidia-gl-570:i386),
+    # więc dobieramy ją dynamicznie na podstawie zainstalowanego pakietu nvidia-driver-XXX.
+    NVIDIA_BRANCH=$(dpkg -l 2>/dev/null | grep -oP '^ii\s+nvidia-driver-\K[0-9]+' | sort -un | tail -1)
+    if [[ -n "$NVIDIA_BRANCH" ]]; then
+        sudo apt-get install -yq "libnvidia-gl-${NVIDIA_BRANCH}:i386" || \
+            log_warn "Nie udało się zainstalować libnvidia-gl-${NVIDIA_BRANCH}:i386." \
+                     "Failed to install libnvidia-gl-${NVIDIA_BRANCH}:i386."
+    else
+        log_warn "Nie wykryto zainstalowanego pakietu nvidia-driver-XXX - pomijam instalację 32-bit libnvidia-gl (zainstaluj sterownik NVIDIA przez Menedżer Sterowników, a następnie uruchom skrypt ponownie)." \
+                 "No installed nvidia-driver-XXX package detected - skipping 32-bit libnvidia-gl install (install the NVIDIA driver via Driver Manager first, then re-run the script)."
+    fi
     add_module "nvidia"
     add_module "nvidia_modeset"
     add_module "nvidia_uvm"
     add_module "nvidia_drm"
-elif echo "$VGA_INFO" | grep -iq "AMD"; then
-    sudo apt-get install -yq libgl1-mesa-dri:i386 mesa-vulkan-drivers:i386
-    add_module "amdgpu"
-elif echo "$VGA_INFO" | grep -iq "Intel"; then
-    sudo apt-get install -yq libgl1-mesa-dri:i386 mesa-vulkan-drivers:i386
-    add_module "i915"
-else
-    sudo apt-get install -yq libgl1-mesa-dri:i386 mesa-vulkan-drivers:i386
 fi
 
-sudo update-initramfs -u
+sudo update-initramfs -u || log_warn "Aktualizacja initramfs nie powiodła się." "initramfs update failed."
 sudo flatpak install -y flathub it.mijorus.gearlever || true
 
 wait_for_apt
@@ -378,11 +413,13 @@ rm -rf "$DEB_DIR"
 show_progress 8 $TOTAL_STEPS "$MSG_PHASE_3"
 
 wait_for_apt
-sudo apt-get install -yq virt-manager qemu-system qemu-utils libvirt-daemon-system libvirt-clients ovmf dnsmasq bluetooth bluez bluez-firmware bluez-tools ufw
+sudo apt-get install -yq virt-manager qemu-system qemu-utils libvirt-daemon-system libvirt-clients ovmf dnsmasq bluetooth bluez bluez-firmware bluez-tools ufw \
+    || log_warn "Instalacja pakietów wirtualizacji/bluetooth/ufw nie w pełni się powiodła." \
+                "Virtualization/bluetooth/ufw package install did not fully succeed."
 
 for svc in libvirtd virtqemud; do
     if systemctl list-unit-files "${svc}.service" 2>/dev/null | grep -q "$svc"; then
-        sudo systemctl enable --now "${svc}.service"
+        sudo systemctl enable --now "${svc}.service" || log_warn "Nie udało się uruchomić usługi ${svc}." "Failed to start ${svc} service."
         break
     fi
 done
@@ -402,7 +439,7 @@ if command -v ufw &>/dev/null || [[ -x /usr/sbin/ufw ]]; then
     sudo ufw allow out on virbr0
     sudo ufw allow from 192.168.122.0/24
     # Nie blokuj samych siebie: jeśli działa sshd, port SSH musi zostać otwarty PRZED włączeniem firewalla
-    if command -v sshd &>/dev/null || systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
+    if dpkg -s openssh-server &>/dev/null || [[ -x /usr/sbin/sshd ]] || systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
         sudo ufw allow ssh
     fi
     if [[ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]]; then
@@ -421,7 +458,7 @@ show_progress 9 $TOTAL_STEPS "$MSG_PHASE_3"
 sudo systemctl enable fstrim.timer || true
 sudo journalctl --vacuum-time=2d || true
 sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub || true
-sudo update-grub
+sudo update-grub || log_warn "Aktualizacja GRUB nie powiodła się." "GRUB update failed."
 
 if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
     sudo mkdir -p /var/lib/AccountsService/icons/
@@ -533,7 +570,10 @@ if [[ -d "$SCRIPT_DIR/.icons" ]]; then cp -af "$SCRIPT_DIR/.icons/." ~/.icons/; 
 if [[ -d "$SCRIPT_DIR/.themes" ]]; then cp -af "$SCRIPT_DIR/.themes/." ~/.themes/; fi
 
 if [[ "$OLD_USER_PLACEHOLDER" != "$CURRENT_USER" ]]; then
-    find ~/.config -type f -exec sed -i "s|/home/$OLD_USER_PLACEHOLDER|/home/$CURRENT_USER|g" {} + 2>/dev/null || true
+    for dir in ~/.config ~/.local ~/.icons ~/.themes; do
+        [[ -d "$dir" ]] || continue
+        find "$dir" -type f -exec sed -i "s|/home/$OLD_USER_PLACEHOLDER|/home/$CURRENT_USER|g" {} + 2>/dev/null || true
+    done
 fi
 
 if [[ -n "$CHOSEN_WALLPAPER" ]]; then
