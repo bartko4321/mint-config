@@ -53,7 +53,7 @@ log_ok()    { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${SUCCESS}✔ $m${NC
 log_err()   { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${ERROR}✘ ERROR: $m${NC}"; }
 log_warn()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${WARN}⚠ WARN: $m${NC}"; }
 
-trap 'log_err "Błąd w linii $LINENO. Polecenie: $BASH_COMMAND"' ERR
+trap 'log_err "Błąd w linii $LINENO. Polecenie: $BASH_COMMAND" "Error at line $LINENO. Command: $BASH_COMMAND"' ERR
 
 show_progress() {
     local step=$1
