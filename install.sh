@@ -110,11 +110,6 @@ DEB_DIR="/tmp/debs_$$"
 source /etc/os-release
 OS_CODENAME="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
 echo "Wykryty system: ${PRETTY_NAME:-nieznany}, codename: ${OS_CODENAME:-nieznany}"
-if [[ -z "$OS_CODENAME" ]]; then
-    log_warn "Nie udało się wykryć nazwy kodowej dystrybucji (codename) - repozytoria PPA dodawane w dalszej części skryptu mogą nie działać poprawnie." \
-             "Could not detect the distribution codename - PPAs added later in the script may not work correctly."
-fi
-
 if [[ "$EUID" -eq 0 ]]; then
     if [[ "$SCRIPT_LANG" == "pl" ]]; then
         echo -e "${ERROR}✖ Nie uruchamiaj skryptu jako root. Użyj zwykłego użytkownika z sudo.${NC}" >&3
@@ -259,19 +254,16 @@ if [[ "$BRAVE_KEY_OK" -eq 1 ]]; then
     sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
 else
     sudo rm -f /usr/share/keyrings/brave-browser-archive-keyring.gpg
-    log_warn "Nie udało się pobrać klucza GPG Brave – pomijam dodanie repozytorium Brave." \
-             "Could not fetch the Brave GPG key – skipping the Brave repository."
 fi
 
 wait_for_apt
 safe_apt_update
-sudo apt-get upgrade -yq || log_warn "Pełna aktualizacja systemu (apt-get upgrade) nie w pełni się powiodła - kontynuuję." \
-                                       "Full system upgrade (apt-get upgrade) did not fully succeed - continuing."
+sudo apt-get upgrade -yq || true
 
 show_progress 3 $TOTAL_STEPS "$MSG_PHASE_1"
 
 wait_for_apt
-sudo apt-get install -yq linux-firmware || log_warn "Nie udało się zainstalować linux-firmware." "Failed to install linux-firmware."
+sudo apt-get install -yq linux-firmware || true
 
 PACKAGES_REMOVE=()
 if [[ ${#PACKAGES_REMOVE[@]} -gt 0 ]]; then
@@ -301,18 +293,12 @@ PACKAGES_INSTALL=(
     zsh zsh-syntax-highlighting zsh-autosuggestions
 )
 if ! sudo apt-get install -yq "${PACKAGES_INSTALL[@]}"; then
-    log_warn "Instalacja zbiorcza pakietów nie powiodła się - próbuję pojedynczo, aby pominąć tylko wadliwe pakiety." \
-             "Bulk package install failed - retrying one by one to skip only the broken packages."
     FAILED_PACKAGES=()
     for pkg in "${PACKAGES_INSTALL[@]}"; do
         if ! sudo apt-get install -yq "$pkg" > /tmp/install-"$pkg".log 2>&1; then
             FAILED_PACKAGES+=("$pkg")
         fi
     done
-    if [[ ${#FAILED_PACKAGES[@]} -gt 0 ]]; then
-        log_warn "Nie udało się zainstalować: ${FAILED_PACKAGES[*]}. Logi w /tmp/install-<pakiet>.log" \
-                 "Failed to install: ${FAILED_PACKAGES[*]}. Logs in /tmp/install-<package>.log"
-    fi
 fi
 
 show_progress 5 $TOTAL_STEPS "$MSG_PHASE_2"
@@ -338,7 +324,7 @@ fi
 show_progress 6 $TOTAL_STEPS "$MSG_PHASE_2"
 
 wait_for_apt
-sudo apt-get install -yq wine wine64 || log_warn "Nie udało się zainstalować wine/wine64." "Failed to install wine/wine64."
+sudo apt-get install -yq wine wine64 || true
 
 VGA_INFO=$(lspci -nn | grep -iE "VGA|3D|Display" || true)
 MODULES_FILE="/etc/initramfs-tools/modules"
@@ -364,12 +350,7 @@ if [[ "$HAS_NVIDIA" -eq 1 ]]; then
     # więc dobieramy ją dynamicznie na podstawie zainstalowanego pakietu nvidia-driver-XXX.
     NVIDIA_BRANCH=$(dpkg -l 2>/dev/null | grep -oP '^ii\s+nvidia-driver-\K[0-9]+' | sort -un | tail -1)
     if [[ -n "$NVIDIA_BRANCH" ]]; then
-        sudo apt-get install -yq "libnvidia-gl-${NVIDIA_BRANCH}:i386" || \
-            log_warn "Nie udało się zainstalować libnvidia-gl-${NVIDIA_BRANCH}:i386." \
-                     "Failed to install libnvidia-gl-${NVIDIA_BRANCH}:i386."
-    else
-        log_warn "Nie wykryto zainstalowanego pakietu nvidia-driver-XXX - pomijam instalację 32-bit libnvidia-gl (zainstaluj sterownik NVIDIA przez Menedżer Sterowników, a następnie uruchom skrypt ponownie)." \
-                 "No installed nvidia-driver-XXX package detected - skipping 32-bit libnvidia-gl install (install the NVIDIA driver via Driver Manager first, then re-run the script)."
+        sudo apt-get install -yq "libnvidia-gl-${NVIDIA_BRANCH}:i386" || true
     fi
     add_module "nvidia"
     add_module "nvidia_modeset"
@@ -377,7 +358,7 @@ if [[ "$HAS_NVIDIA" -eq 1 ]]; then
     add_module "nvidia_drm"
 fi
 
-sudo update-initramfs -u || log_warn "Aktualizacja initramfs nie powiodła się." "initramfs update failed."
+sudo update-initramfs -u || true
 sudo flatpak install -y flathub it.mijorus.gearlever || true
 
 wait_for_apt
@@ -413,13 +394,11 @@ rm -rf "$DEB_DIR"
 show_progress 8 $TOTAL_STEPS "$MSG_PHASE_3"
 
 wait_for_apt
-sudo apt-get install -yq virt-manager qemu-system qemu-utils libvirt-daemon-system libvirt-clients ovmf dnsmasq bluetooth bluez bluez-firmware bluez-tools ufw \
-    || log_warn "Instalacja pakietów wirtualizacji/bluetooth/ufw nie w pełni się powiodła." \
-                "Virtualization/bluetooth/ufw package install did not fully succeed."
+sudo apt-get install -yq virt-manager qemu-system qemu-utils libvirt-daemon-system libvirt-clients ovmf dnsmasq bluetooth bluez bluez-firmware bluez-tools ufw || true
 
 for svc in libvirtd virtqemud; do
     if systemctl list-unit-files "${svc}.service" 2>/dev/null | grep -q "$svc"; then
-        sudo systemctl enable --now "${svc}.service" || log_warn "Nie udało się uruchomić usługi ${svc}." "Failed to start ${svc} service."
+        sudo systemctl enable --now "${svc}.service" || true
         break
     fi
 done
@@ -442,10 +421,6 @@ if command -v ufw &>/dev/null || [[ -x /usr/sbin/ufw ]]; then
     if dpkg -s openssh-server &>/dev/null || [[ -x /usr/sbin/sshd ]] || systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
         sudo ufw allow ssh
     fi
-    if [[ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]]; then
-        log_warn "Wykryto aktywną sesję SSH - upewniono się, że port SSH zostanie otwarty przed włączeniem ufw." \
-                 "Active SSH session detected - made sure the SSH port stays open before enabling ufw."
-    fi
     sudo ufw --force enable
 fi
 
@@ -458,7 +433,7 @@ show_progress 9 $TOTAL_STEPS "$MSG_PHASE_3"
 sudo systemctl enable fstrim.timer || true
 sudo journalctl --vacuum-time=2d || true
 sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub || true
-sudo update-grub || log_warn "Aktualizacja GRUB nie powiodła się." "GRUB update failed."
+sudo update-grub || true
 
 if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
     sudo mkdir -p /var/lib/AccountsService/icons/
@@ -537,8 +512,6 @@ if [[ -n "$ACTIVE_CONN" ]]; then
             getent hosts github.com &>/dev/null && break
             sleep 1
         done
-    else
-        log_warn "Nie udało się zmienić DNS dla połączenia $ACTIVE_CONN." "Failed to change DNS for connection $ACTIVE_CONN."
     fi
 fi
 
