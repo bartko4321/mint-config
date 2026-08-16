@@ -36,9 +36,9 @@ cleanup_on_exit() {
         echo -e "\n" >&3
         cp -f "$TMP_LOG" "$LOG_FILE" 2>/dev/null || true
         if [[ "$SCRIPT_LANG" == "pl" ]]; then
-            echo -e "${ERROR}✖ Wystąpił błąd (kod: $exit_code). Szczegółowy log zapisano w: $LOG_FILE${NC}" >&3
+            echo -e "${ERR}✖ Wystąpił błąd (kod: $exit_code). Szczegółowy log zapisano w: $LOG_FILE${NC}" >&3
         else
-            echo -e "${ERROR}✖ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
+            echo -e "${ERR}✖ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
         fi
     fi
     rm -f "$TMP_LOG"
@@ -110,9 +110,9 @@ OS_CODENAME="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
 echo "Wykryty system: ${PRETTY_NAME:-nieznany}, codename: ${OS_CODENAME:-nieznany}"
 if [[ "$EUID" -eq 0 ]]; then
     if [[ "$SCRIPT_LANG" == "pl" ]]; then
-        echo -e "${ERROR}✖ Nie uruchamiaj skryptu jako root. Użyj zwykłego użytkownika z sudo.${NC}" >&3
+        echo -e "${ERR}✖ Nie uruchamiaj skryptu jako root. Użyj zwykłego użytkownika z sudo.${NC}" >&3
     else
-        echo -e "${ERROR}✖ Do not run as root. Use a regular user with sudo privileges.${NC}" >&3
+        echo -e "${ERR}✖ Do not run as root. Use a regular user with sudo privileges.${NC}" >&3
     fi
     exit 1
 fi
@@ -126,9 +126,9 @@ if sudo visudo -cf "$SUDOERS_TMP"; then
 else
     rm -f "$SUDOERS_TMP"
     if [[ "$SCRIPT_LANG" == "pl" ]]; then
-        echo -e "${ERROR}✖ Nieprawidłowa składnia reguły sudoers - przerywam.${NC}" >&3
+        echo -e "${ERR}✖ Nieprawidłowa składnia reguły sudoers - przerywam.${NC}" >&3
     else
-        echo -e "${ERROR}✖ Invalid sudoers rule syntax - aborting.${NC}" >&3
+        echo -e "${ERR}✖ Invalid sudoers rule syntax - aborting.${NC}" >&3
     fi
     exit 1
 fi
