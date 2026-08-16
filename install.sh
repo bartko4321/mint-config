@@ -19,8 +19,8 @@ SCRIPT_LANG="$(detect_system_lang)"
 
 INFO='\033[0;34m'
 SUCCESS='\033[0;32m'
-ERROR='\033[0;31m'
 WARN='\033[0;33m'
+ERR='\033[0;31m'
 NC='\033[0m'
 
 TMP_LOG="$(mktemp /tmp/mint-install-log.XXXXXX)"
@@ -28,8 +28,6 @@ LOG_FILE="$HOME/install_error_$(date +%Y%m%d_%H%M%S).log"
 
 exec 3>&1
 exec >>"$TMP_LOG" 2>&1
-
-printf '\033[?7l' >&3
 
 cleanup_on_exit() {
     local exit_code=$?
@@ -50,7 +48,7 @@ trap cleanup_on_exit EXIT
 _pick_msg() { [[ "$SCRIPT_LANG" == "pl" ]] && echo "$1" || echo "$2"; }
 log_info()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${INFO}==> $m${NC}"; }
 log_ok()    { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${SUCCESS}✔ $m${NC}"; }
-log_err()   { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${ERROR}✘ ERROR: $m${NC}"; }
+log_err()   { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${ERR}✘ ERROR: $m${NC}"; }
 log_warn()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${WARN}⚠ WARN: $m${NC}"; }
 
 trap 'log_err "Błąd w linii $LINENO. Polecenie: $BASH_COMMAND" "Error at line $LINENO. Command: $BASH_COMMAND"' ERR
@@ -119,6 +117,7 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
+printf '\033[?7h\n' >&3
 sudo -v
 SUDOERS_TMP="$(mktemp)"
 echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" > "$SUDOERS_TMP"
@@ -135,6 +134,8 @@ else
 fi
 rm -f "$SUDOERS_TMP"
 
+printf '\033[?7l' >&3
+
 safe_apt_update() {
     local out rc
     set +e
@@ -144,8 +145,6 @@ safe_apt_update() {
     echo "$out"
     [[ $rc -eq 0 ]] && return 0
 
-    # Wzorzec obejmuje PL/EN ("Błąd"/"Err") oraz uniwersalny fallback niezależny od LANG/LC_ALL
-    # apt zawsze poprzedza URL numerem błędu i dwukropkiem, niezależnie od języka komunikatu.
     local broken_urls
     broken_urls=$(echo "$out" | grep -oP '(?:Błąd|Err|Fehler|Erreur|Errore|Erro):[0-9]+ \Khttps?://\S+')
     broken_urls+=$'\n'"$(echo "$out" | grep -oP '^\S+:[0-9]+ \Khttps?://\S+(?= )')"
@@ -330,7 +329,6 @@ VGA_INFO=$(lspci -nn | grep -iE "VGA|3D|Display" || true)
 MODULES_FILE="/etc/initramfs-tools/modules"
 add_module() { grep -q "^$1" "$MODULES_FILE" || echo "$1" | sudo tee -a "$MODULES_FILE" > /dev/null; }
 
-# Wykrywanie niezależne dla każdego dostawcy - obsługuje też układy hybrydowe (np. laptop Intel+NVIDIA)
 HAS_NVIDIA=0; HAS_AMD=0; HAS_INTEL=0
 echo "$VGA_INFO" | grep -iq "NVIDIA" && HAS_NVIDIA=1
 echo "$VGA_INFO" | grep -iq "AMD"    && HAS_AMD=1
@@ -338,7 +336,6 @@ echo "$VGA_INFO" | grep -iq "Intel"  && HAS_INTEL=1
 
 wait_for_apt
 
-# Mesa/Vulkan: potrzebne dla AMD/Intela, oraz jako baza gdy nic nie wykryto
 if [[ "$HAS_AMD" -eq 1 || "$HAS_INTEL" -eq 1 || ( "$HAS_NVIDIA" -eq 0 && "$HAS_AMD" -eq 0 && "$HAS_INTEL" -eq 0 ) ]]; then
     sudo apt-get install -yq libgl1-mesa-dri:i386 mesa-vulkan-drivers:i386 || true
 fi
@@ -346,8 +343,6 @@ fi
 [[ "$HAS_INTEL" -eq 1 ]] && add_module "i915"
 
 if [[ "$HAS_NVIDIA" -eq 1 ]]; then
-    # Nazwa pakietu 32-bit zależy od zainstalowanej wersji sterownika (np. libnvidia-gl-570:i386),
-    # więc dobieramy ją dynamicznie na podstawie zainstalowanego pakietu nvidia-driver-XXX.
     NVIDIA_BRANCH=$(dpkg -l 2>/dev/null | grep -oP '^ii\s+nvidia-driver-\K[0-9]+' | sort -un | tail -1)
     if [[ -n "$NVIDIA_BRANCH" ]]; then
         sudo apt-get install -yq "libnvidia-gl-${NVIDIA_BRANCH}:i386" || true
@@ -417,7 +412,6 @@ if command -v ufw &>/dev/null || [[ -x /usr/sbin/ufw ]]; then
     sudo ufw allow in  on virbr0
     sudo ufw allow out on virbr0
     sudo ufw allow from 192.168.122.0/24
-    # Nie blokuj samych siebie: jeśli działa sshd, port SSH musi zostać otwarty PRZED włączeniem firewalla
     if dpkg -s openssh-server &>/dev/null || [[ -x /usr/sbin/sshd ]] || systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
         sudo ufw allow ssh
     fi
@@ -507,7 +501,6 @@ ACTIVE_CONN=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | gre
 if [[ -n "$ACTIVE_CONN" ]]; then
     if sudo nmcli connection modify "$ACTIVE_CONN" ipv4.dns "1.1.1.1,1.0.0.1" ipv6.dns "2606:4700:4700::1112,2606:4700:4700::1002"; then
         sudo nmcli connection up "$ACTIVE_CONN" || true
-        # Kolejne kroki (curl/git dla zsh) potrzebują działającej sieci - poczekaj, aż DNS znów odpowiada
         for i in {1..10}; do
             getent hosts github.com &>/dev/null && break
             sleep 1
