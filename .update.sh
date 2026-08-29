@@ -31,6 +31,14 @@ t() {
             apt_update) echo "==> Pełna aktualizacja systemu (APT)..." ;;
             mintupdate) echo "==> Sprawdzanie aktualizacji przez mintupdate-cli..." ;;
             flatpak_update) echo "==> Pełna aktualizacja aplikacji Flatpak..." ;;
+            spices_section) echo "==> Aktualizacja rozszerzeń Cinnamon (aplety/dekstlety/rozszerzenia)..." ;;
+            spices_missing_tools) echo "==> Brak curl/jq/unzip - pomijam aktualizację rozszerzeń Cinnamon." ;;
+            spices_updating) echo "Aktualizowanie" ;;
+            spices_updated) echo "Zaktualizowano" ;;
+            spices_up_to_date) echo "==> Wszystkie zainstalowane rozszerzenia Cinnamon są aktualne." ;;
+            spices_none) echo "==> Brak zainstalowanych rozszerzeń Cinnamon (aplety/dekstlety/rozszerzenia)." ;;
+            spices_download_failed) echo "Błąd aktualizacji" ;;
+            spices_backup_restored) echo "Przywrócono poprzednią wersję po nieudanej aktualizacji" ;;
             firmware_section) echo "==> Aktualizacja firmware (fwupd)..." ;;
             firmware_refresh) echo "==> Odświeżanie bazy metadanych firmware..." ;;
             firmware_check) echo "==> Sprawdzanie dostępnych aktualizacji firmware..." ;;
@@ -81,6 +89,14 @@ t() {
             apt_update) echo "==> Full system update (APT)..." ;;
             mintupdate) echo "==> Checking for updates via mintupdate-cli..." ;;
             flatpak_update) echo "==> Full Flatpak application update..." ;;
+            spices_section) echo "==> Updating Cinnamon Spices (applets/desklets/extensions)..." ;;
+            spices_missing_tools) echo "==> curl/jq/unzip not found - skipping Cinnamon Spices update." ;;
+            spices_updating) echo "Updating" ;;
+            spices_updated) echo "Updated" ;;
+            spices_up_to_date) echo "==> All installed Cinnamon Spices are up to date." ;;
+            spices_none) echo "==> No installed Cinnamon Spices (applets/desklets/extensions) found." ;;
+            spices_download_failed) echo "Update failed" ;;
+            spices_backup_restored) echo "Restored previous version after failed update" ;;
             firmware_section) echo "==> Firmware update (fwupd)..." ;;
             firmware_refresh) echo "==> Refreshing firmware metadata..." ;;
             firmware_check) echo "==> Checking for available firmware updates..." ;;
@@ -125,6 +141,108 @@ t() {
     fi
 }
 
+# ============================================================
+# AKTUALIZACJA ROZSZERZEŃ CINNAMON (SPICES) / CINNAMON SPICES UPDATE
+# Aplety, dekstlety i rozszerzenia z ~/.local/share/cinnamon
+# Korzysta z publicznego indeksu cinnamon-spices.linuxmint.com.
+# Działanie "best-effort": w razie jakiegokolwiek błędu dany
+# element jest pomijany, a poprzednia wersja przywracana.
+# ============================================================
+update_cinnamon_spices() {
+    echo -e "\n${GREEN}$(t spices_section)${NC}"
+
+    if ! command -v curl &> /dev/null || ! command -v jq &> /dev/null || ! command -v unzip &> /dev/null; then
+        echo -e "${YELLOW}$(t spices_missing_tools)${NC}"
+        return
+    fi
+
+    local base_dir="$HOME/.local/share/cinnamon"
+    local types=(applet desklet extension)
+    local any_found=0
+    local any_updated=0
+    local tmp_root
+    tmp_root=$(mktemp -d)
+
+    for type in "${types[@]}"; do
+        local type_plural="${type}s"
+        local install_dir="$base_dir/${type_plural}"
+        [ -d "$install_dir" ] || continue
+
+        local index_json
+        index_json=$(curl -fsSL "https://cinnamon-spices.linuxmint.com/json/${type_plural}.json" 2>/dev/null)
+        [ -z "$index_json" ] && continue
+        echo "$index_json" | jq -e . >/dev/null 2>&1 || continue
+
+        for xlet_dir in "$install_dir"/*; do
+            [ -d "$xlet_dir" ] || continue
+            local meta_file="$xlet_dir/metadata.json"
+            [ -f "$meta_file" ] || continue
+
+            local uuid
+            uuid=$(basename "$xlet_dir")
+            any_found=1
+
+            local remote_edited
+            remote_edited=$(echo "$index_json" | jq -r --arg u "$uuid" '.[$u]["last_edited"] // empty' 2>/dev/null)
+            [ -z "$remote_edited" ] && continue
+
+            local local_edited
+            local_edited=$(jq -r '.["last-edited"] // .["last_edited"] // empty' "$meta_file" 2>/dev/null)
+
+            if [ -n "$local_edited" ] && [ "$local_edited" -ge "$remote_edited" ] 2>/dev/null; then
+                continue
+            fi
+
+            echo -e "${YELLOW}$(t spices_updating): [$type] $uuid${NC}"
+
+            local zip_file="$tmp_root/$uuid.zip"
+            if ! curl -fsSL "https://cinnamon-spices.linuxmint.com/files/${uuid}.zip" -o "$zip_file" 2>/dev/null; then
+                echo -e "${RED}$(t spices_download_failed): $uuid${NC}"
+                continue
+            fi
+
+            local extract_dir="$tmp_root/extract_$uuid"
+            mkdir -p "$extract_dir"
+            if ! unzip -qq -o "$zip_file" -d "$extract_dir" 2>/dev/null; then
+                echo -e "${RED}$(t spices_download_failed): $uuid${NC}"
+                rm -rf "$extract_dir" "$zip_file"
+                continue
+            fi
+
+            # Zawartość paczki: UUID/files/UUID/... (struktura Cinnamon Spices)
+            local source_dir="$extract_dir/$uuid/files/$uuid"
+            [ -d "$source_dir" ] || source_dir="$extract_dir/$uuid"
+            if [ ! -d "$source_dir" ]; then
+                echo -e "${RED}$(t spices_download_failed): $uuid${NC}"
+                rm -rf "$extract_dir" "$zip_file"
+                continue
+            fi
+
+            local backup_dir="$tmp_root/backup_$uuid"
+            cp -a "$xlet_dir" "$backup_dir" 2>/dev/null
+
+            if rm -rf "$xlet_dir" && cp -a "$source_dir" "$xlet_dir"; then
+                echo -e "${GREEN}$(t spices_updated): [$type] $uuid${NC}"
+                any_updated=1
+            else
+                rm -rf "$xlet_dir"
+                cp -a "$backup_dir" "$xlet_dir" 2>/dev/null
+                echo -e "${RED}$(t spices_download_failed): $uuid - $(t spices_backup_restored)${NC}"
+            fi
+
+            rm -rf "$extract_dir" "$zip_file" "$backup_dir"
+        done
+    done
+
+    rm -rf "$tmp_root"
+
+    if [ "$any_found" -eq 0 ]; then
+        echo -e "${YELLOW}$(t spices_none)${NC}"
+    elif [ "$any_updated" -eq 0 ]; then
+        echo -e "${GREEN}$(t spices_up_to_date)${NC}"
+    fi
+}
+
 echo -e "${BLUE}$(t title1)${NC}"
 echo -e "${BLUE}$(t title2)${NC}"
 echo -e "${BLUE}$(t title3)${NC}"
@@ -157,6 +275,9 @@ if command -v flatpak &> /dev/null; then
     echo -e "\n${GREEN}$(t flatpak_update)${NC}"
     flatpak update -y
 fi
+
+# Aktualizacja rozszerzeń Cinnamon (aplety/dekstlety/rozszerzenia)
+update_cinnamon_spices
 
 # Aktualizacja firmware (fwupd)
 if command -v fwupdmgr &> /dev/null; then
