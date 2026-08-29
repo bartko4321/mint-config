@@ -1,15 +1,11 @@
 #!/bin/bash
 
-# Kolory
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# ============================================================
-# WYKRYWANIE JĘZYKA / LANGUAGE DETECTION
-# ============================================================
 detect_lang() {
     local l="${LANG:-}${LANGUAGE:-}${LC_ALL:-}"
     case "$l" in
@@ -19,7 +15,6 @@ detect_lang() {
 }
 LANGCODE=$(detect_lang)
 
-# t <key> -> zwraca przetłumaczony komunikat (bez kolorów)
 t() {
     local key="$1"
     if [ "$LANGCODE" = "pl" ]; then
@@ -141,13 +136,6 @@ t() {
     fi
 }
 
-# ============================================================
-# AKTUALIZACJA ROZSZERZEŃ CINNAMON (SPICES) / CINNAMON SPICES UPDATE
-# Aplety, dekstlety i rozszerzenia z ~/.local/share/cinnamon
-# Korzysta z publicznego indeksu cinnamon-spices.linuxmint.com.
-# Działanie "best-effort": w razie jakiegokolwiek błędu dany
-# element jest pomijany, a poprzednia wersja przywracana.
-# ============================================================
 update_cinnamon_spices() {
     echo -e "\n${GREEN}$(t spices_section)${NC}"
 
@@ -209,7 +197,6 @@ update_cinnamon_spices() {
                 continue
             fi
 
-            # Zawartość paczki: UUID/files/UUID/... (struktura Cinnamon Spices)
             local source_dir="$extract_dir/$uuid/files/$uuid"
             [ -d "$source_dir" ] || source_dir="$extract_dir/$uuid"
             if [ ! -d "$source_dir" ]; then
@@ -248,38 +235,30 @@ echo -e "${BLUE}$(t title2)${NC}"
 echo -e "${BLUE}$(t title3)${NC}"
 echo -e "${BLUE}$(t title1)${NC}"
 
-# 1. ZAPYTANIE O HASŁO TYLKO RAZ
 echo -e "${YELLOW}$(t ask_password)${NC}"
 sudo -v
 
-# Podtrzymanie sudo
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 SUDO_KEEP_ALIVE_PID=$!
 
 echo -e "\n${GREEN}$(t apt_update)${NC}"
 
-# Używamy apt-get (stabilne dla skryptów) + ukrywamy irytujące komunikaty o i386
 sudo apt-get update 2>&1 | grep -v "nie obsługuje architektury\|Pomijanie pozyskania skonfigurowanego pliku"
 
-# Kontynuacja pełnej aktualizacji (dist-upgrade to odpowiednik full-upgrade w apt-get)
 sudo apt-get dist-upgrade -y
 
-# Aktualizacja przez narzędzie Mintupdate (jeśli dostępne w wersji CLI)
 if command -v mintupdate-cli &> /dev/null; then
     echo -e "\n${GREEN}$(t mintupdate)${NC}"
     sudo mintupdate-cli upgrade -y 2>/dev/null
 fi
 
-# Aktualizacja Flatpak (w Mint dostępny domyślnie z Mintinstall)
 if command -v flatpak &> /dev/null; then
     echo -e "\n${GREEN}$(t flatpak_update)${NC}"
     flatpak update -y
 fi
 
-# Aktualizacja rozszerzeń Cinnamon (aplety/dekstlety/rozszerzenia)
 update_cinnamon_spices
 
-# Aktualizacja firmware (fwupd)
 if command -v fwupdmgr &> /dev/null; then
     echo -e "\n${GREEN}$(t firmware_section)${NC}"
     echo -e "${GREEN}$(t firmware_refresh)${NC}"
@@ -298,13 +277,11 @@ echo -e "\n${BLUE}$(t phase1)${NC}"
 echo -e "${GREEN}$(t autoremove)${NC}"
 sudo apt-get autoremove --purge -y
 
-# Deborphan
 if command -v deborphan &> /dev/null; then
     echo -e "${GREEN}$(t deborphan)${NC}"
     sudo apt-get purge $(deborphan) -y 2>/dev/null
 fi
 
-# Aktualizacja kluczy APT
 echo -e "${GREEN}$(t apt_keys)${NC}"
 sudo apt-key net-update 2>/dev/null
 
@@ -314,14 +291,12 @@ sudo apt-get autoclean
 echo -e "${GREEN}$(t ppa_clean)${NC}"
 sudo find /etc/apt/sources.list.d/ -type f -name "*.save" -delete
 
-# Kompleksowe czyszczenie Flatpak (System)
 if command -v flatpak &> /dev/null; then
     echo -e "${GREEN}$(t flatpak_clean_system)${NC}"
     sudo flatpak uninstall --unused --system -y
     sudo flatpak uninstall --unused --delete-data -y 2>/dev/null
     sudo flatpak repair --system
 
-    # Usuwanie nieużywanych repozytoriów (remotes)
     USED_REMOTES=$(flatpak list --columns=origin 2>/dev/null | sort -u)
     ALL_REMOTES=$(flatpak remotes --columns=name 2>/dev/null)
 
@@ -332,12 +307,10 @@ if command -v flatpak &> /dev/null; then
         fi
     done <<< "$ALL_REMOTES"
 
-    # Czyszczenie plików tymczasowych i historii Flatpak
     sudo rm -rf /var/tmp/flatpak-cache-* 2>/dev/null
     sudo find /var/lib/flatpak -name "*.tmp" -delete 2>/dev/null
     sudo rm -f /var/lib/flatpak/history 2>/dev/null
 
-    # INTELIGENTNE CZYSZCZENIE /var/app (tylko osierocone dane)
     echo -e "${GREEN}$(t flatpak_orphan_system)${NC}"
     INSTALLED_FLATPAKS=$(flatpak list --app --columns=application 2>/dev/null)
     if [ -d "/var/app" ]; then
@@ -366,7 +339,6 @@ sudo find /var/tmp -type f -atime +3 -delete 2>/dev/null
 
 echo -e "${GREEN}$(t kernel_clean)${NC}"
 if command -v mintsystem &> /dev/null; then
-    # Wbudowane, bezpieczne narzędzie Mint do usuwania starych kerneli
     sudo mintsystem removekernels 2>/dev/null
 else
     CURRENT_KERNEL=$(uname -r)
@@ -408,7 +380,6 @@ if command -v flatpak &> /dev/null; then
     rm -rf ~/.local/share/flatpak/repo/tmp/* 2>/dev/null
     rm -f ~/.local/share/flatpak/history 2>/dev/null
 
-    # INTELIGENTNE CZYSZCZENIE ~/.var/app (tylko osierocone dane)
     echo -e "${GREEN}$(t flatpak_orphan_user)${NC}"
     INSTALLED_FLATPAKS=$(flatpak list --app --columns=application 2>/dev/null)
     if [ -d "$HOME/.var/app" ]; then
@@ -438,13 +409,11 @@ rm -rf "$HOME/.cache/virt-manager" 2>/dev/null
 echo -e "${GREEN}$(t nemo_restart)${NC}"
 nemo -q 2>/dev/null
 
-# Zakończenie
 kill $SUDO_KEEP_ALIVE_PID 2>/dev/null
 echo -e "\n${BLUE}$(t title1)${NC}"
 echo -e "${GREEN}$(t done_title)${NC}"
 echo -e "${BLUE}$(t title1)${NC}"
 
-# Sprawdzanie konieczności restartu (np. po aktualizacji kernela)
 echo -e "\n${GREEN}$(t checking_state)${NC}"
 if [ -f /var/run/reboot-required ]; then
     echo -e "\n${RED}******************************************************${NC}"
