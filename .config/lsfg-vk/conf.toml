@@ -1,10 +1,10 @@
 version = 1
 
 [global]
-dll = "/home/bartek/.local/share/Steam/Lossless Scaling/Lossless.dll"
+dll = "~/.local/share/Steam/Lossless Scaling/Lossless.dll"
 
 [[game]]
-exe = "Bartek"
+exe = "user"
 multiplier = 3
 flow_scale = 0.6
 performance_mode = true
