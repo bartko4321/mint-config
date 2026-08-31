@@ -1,6 +1,6 @@
-# 🚀 Linux Mint + Cinnamon: Comprehensive Configuration Script
+# 🚀 Linux Mint : Comprehensive Configuration Script
 
-An automated, powerful Bash script designed to transform a clean **Linux Mint** installation with the **Cinnamon** desktop into a complete, optimized workstation ready for both work and entertainment.
+An automated, powerful Bash script designed to transform a clean **Linux Mint** installation with the desktop into a complete, optimized workstation ready for both work and entertainment.
 
 
 ---
@@ -34,20 +34,13 @@ The script performs a full system deployment divided into several logical stages
 * Automatically adds the current user to the `libvirt`, `libvirt-qemu`, and `kvm` groups.
 * Configures and enables **UFW** (via Mint's `gufw` front-end where available) — blocks incoming traffic by default, allows outgoing, and opens the necessary ports for the virtualization network bridge (`virbr0`).
 
-### 🎨 5. Cinnamon Desktop Personalization
-* **Safe sync:** Copies your pre-made configuration files (`.config`, `.local`, `.icons`) after safely restarting the `cinnamon` process — preventing Cinnamon from overwriting your settings with defaults during shutdown.
-* **User migration:** Automatically scans config files and replaces the old user placeholder (`bartek`) with your current account name.
-* Applies custom **Cinnamon themes, applets, and desklets** (if provided) via `dconf`/`gsettings`, instead of KDE's `kwriteconfig`/`plasma-apply-*` tools.
-* Configures the **Plymouth** boot splash (using the `bgrt` theme) and hides unnecessary GRUB messages (`quiet splash`).
-* Automatically sets the user avatar (via `AccountsService`/`lightdm`), custom Cinnamon splash screen, and wallpapers in multiple resolutions for the *Next*-style theme.
-
-### 🐚 6. Modern Shell (ZSH)
+### 🐚 5. Modern Shell (ZSH)
 * Sets **ZSH** as the default user shell.
 * Installs the **Oh My ZSH** framework in unattended mode.
 * Downloads and activates the powerful **Powerlevel10k** theme.
 * Adds automatic `fastfetch` invocation on terminal startup and enforces correct UTF-8 encoding.
 
-### ⚡ 7. System Optimizations
+### ⚡ 6. System Optimizations
 * Enables regular SSD trimming via `fstrim.timer`.
 * Clears old systemd system logs (`journalctl --vacuum-time=2d`).
 * Sets the GRUB menu timeout to `0` seconds (instant boot).
