@@ -107,13 +107,15 @@ show_progress() {
 }
 
 if [[ "$SCRIPT_LANG" == "pl" ]]; then
-    MSG_PHASE_1="[1/3] Konfiguracja repozytoriów i optymalizacja systemu..."
-    MSG_PHASE_2="[2/3] Instalacja pakietów systemowych, Flatpak i .deb..."
-    MSG_PHASE_3="[3/3] Konfiguracja usług i środowiska ZSH..."
+    MSG_PHASE_1="[1/4] Konfiguracja repozytoriów i optymalizacja systemu..."
+    MSG_PHASE_2="[2/4] Instalacja pakietów systemowych, Flatpak i .deb..."
+    MSG_PHASE_3="[3/4] Konfiguracja usług i środowiska ZSH..."
+    MSG_PHASE_4="[4/4] Zakończenie i sprzątanie..."
 else
-    MSG_PHASE_1="[1/3] Repository configuration and system optimization..."
-    MSG_PHASE_2="[2/3] Installing system packages, Flatpak, and .deb..."
-    MSG_PHASE_3="[3/3] Configuring services and ZSH environment..."
+    MSG_PHASE_1="[1/4] Repository configuration and system optimization..."
+    MSG_PHASE_2="[2/4] Installing system packages, Flatpak, and .deb..."
+    MSG_PHASE_3="[3/4] Configuring services and ZSH environment..."
+    MSG_PHASE_4="[4/4] Finishing up and cleaning..."
 fi
 
 TOTAL_STEPS=12
@@ -488,12 +490,14 @@ if command -v zsh &>/dev/null; then
     fi
 fi
 
+show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
+
 # ==========================================================
 # 4. ZAKOŃCZENIE I SPRZĄTANIE
 # ==========================================================
 sudo rm -f /etc/sudoers.d/99-temp-installer
 
-show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 12 $TOTAL_STEPS "$MSG_PHASE_4"
 echo -e "\n" >&3
 
 if [[ "$SCRIPT_LANG" == "pl" ]]; then
