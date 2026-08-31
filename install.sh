@@ -488,14 +488,12 @@ if command -v zsh &>/dev/null; then
     fi
 fi
 
-show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
-
 # ==========================================================
 # 4. ZAKOŃCZENIE I SPRZĄTANIE
 # ==========================================================
 sudo rm -f /etc/sudoers.d/99-temp-installer
 
-show_progress 12 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
 echo -e "\n" >&3
 
 if [[ "$SCRIPT_LANG" == "pl" ]]; then
