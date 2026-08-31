@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================================
-# KOMPLEKSOWY SKRYPT KONFIGURACYJNY SYSTEMU (CINNAMON + LINUX MINT)
+# KOMPLEKSOWY SKRYPT KONFIGURACYJNY SYSTEMU (LINUX MINT)
 # ==========================================================
 
 set -Eeuo pipefail
@@ -91,18 +91,17 @@ show_progress() {
 if [[ "$SCRIPT_LANG" == "pl" ]]; then
     MSG_PHASE_1="[1/3] Konfiguracja repozytoriów i optymalizacja systemu..."
     MSG_PHASE_2="[2/3] Instalacja pakietów systemowych, Flatpak i .deb..."
-    MSG_PHASE_3="[3/3] Konfiguracja usług, środowiska Cinnamon i ZSH..."
+    MSG_PHASE_3="[3/3] Konfiguracja usług i środowiska ZSH..."
 else
     MSG_PHASE_1="[1/3] Repository configuration and system optimization..."
     MSG_PHASE_2="[2/3] Installing system packages, Flatpak, and .deb..."
-    MSG_PHASE_3="[3/3] Configuring services, Cinnamon, and ZSH environment..."
+    MSG_PHASE_3="[3/3] Configuring services and ZSH environment..."
 fi
 
 TOTAL_STEPS=12
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 CURRENT_USER=$(whoami)
-OLD_USER_PLACEHOLDER="bartek"
 DEB_DIR="/tmp/debs_$$"
 
 source /etc/os-release
@@ -388,7 +387,7 @@ shopt -u nullglob
 rm -rf "$DEB_DIR"
 
 # ==========================================================
-# 3. WIRTUALIZACJA, FIREWALL, CINNAMON I ZSH
+# 3. WIRTUALIZACJA, FIREWALL I ZSH
 # ==========================================================
 show_progress 8 $TOTAL_STEPS "$MSG_PHASE_3"
 
@@ -433,67 +432,6 @@ sudo journalctl --vacuum-time=2d || true
 sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub || true
 sudo update-grub || true
 
-if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
-    sudo mkdir -p /var/lib/AccountsService/icons/
-    sudo cp -af "$SCRIPT_DIR/piwo.png" "/var/lib/AccountsService/icons/$CURRENT_USER"
-    sudo chmod 644 "/var/lib/AccountsService/icons/$CURRENT_USER"
-
-    ACCOUNTS_USER_FILE="/var/lib/AccountsService/users/$CURRENT_USER"
-    if [[ ! -f "$ACCOUNTS_USER_FILE" ]]; then
-        echo -e "[User]\nIcon=/var/lib/AccountsService/icons/$CURRENT_USER" | sudo tee "$ACCOUNTS_USER_FILE" > /dev/null
-    else
-        if ! grep -q "^\[User\]" "$ACCOUNTS_USER_FILE" 2>/dev/null; then echo -e "[User]" | sudo tee -a "$ACCOUNTS_USER_FILE" > /dev/null; fi
-        if grep -q "^Icon=" "$ACCOUNTS_USER_FILE" 2>/dev/null; then
-            sudo sed -i "s|^Icon=.*|Icon=/var/lib/AccountsService/icons/$CURRENT_USER|" "$ACCOUNTS_USER_FILE"
-        else
-            sudo sed -i "/^\[User\]/a Icon=/var/lib/AccountsService/icons/$CURRENT_USER" "$ACCOUNTS_USER_FILE"
-        fi
-    fi
-    sudo chmod 644 "$ACCOUNTS_USER_FILE"
-
-    cp -af "$SCRIPT_DIR/piwo.png" "$HOME/.face"
-    cp -af "$SCRIPT_DIR/piwo.png" "$HOME/.face.icon"
-    chmod 644 "$HOME/.face" "$HOME/.face.icon"
-    sudo systemctl restart accounts-daemon || true
-fi
-
-WALLPAPER_DIR="/usr/share/backgrounds/custom"
-sudo mkdir -p "$WALLPAPER_DIR"
-SOURCE_WALLPAPER="$SCRIPT_DIR/wallpaper.jpg"
-DEST_WALLPAPER="$WALLPAPER_DIR/wallpaper.jpg"
-CHOSEN_WALLPAPER=""
-
-if [[ -f "$SOURCE_WALLPAPER" ]]; then
-    sudo cp "$SOURCE_WALLPAPER" "$DEST_WALLPAPER"
-    sudo chmod 644 "$DEST_WALLPAPER"
-    CHOSEN_WALLPAPER="$DEST_WALLPAPER"
-fi
-
-if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
-    LOGIN_WALLPAPER_DIR="/usr/share/backgrounds/custom"
-    sudo mkdir -p "$LOGIN_WALLPAPER_DIR"
-    sudo cp -af "$SCRIPT_DIR/login-wallpaper.png" "$LOGIN_WALLPAPER_DIR/login-wallpaper.png"
-    sudo chmod 644 "$LOGIN_WALLPAPER_DIR/login-wallpaper.png"
-
-    SLICK_GREETER_CONF="/etc/lightdm/slick-greeter.conf"
-    if [[ -f "$SLICK_GREETER_CONF" ]] || grep -qr "slick-greeter" /usr/share/lightdm/ 2>/dev/null || command -v slick-greeter >/dev/null 2>&1; then
-        sudo mkdir -p "$(dirname "$SLICK_GREETER_CONF")"
-        sudo touch "$SLICK_GREETER_CONF"
-        if grep -q "^background=" "$SLICK_GREETER_CONF" 2>/dev/null; then
-            sudo sed -i "s|^background=.*|background=$LOGIN_WALLPAPER_DIR/login-wallpaper.png|" "$SLICK_GREETER_CONF"
-        elif grep -q "^\[Greeter\]" "$SLICK_GREETER_CONF" 2>/dev/null; then
-            sudo sed -i "/^\[Greeter\]/a background=$LOGIN_WALLPAPER_DIR/login-wallpaper.png" "$SLICK_GREETER_CONF"
-        else
-            printf '[Greeter]\nbackground=%s\n' "$LOGIN_WALLPAPER_DIR/login-wallpaper.png" | sudo tee -a "$SLICK_GREETER_CONF" > /dev/null
-        fi
-        if grep -q "^draw-user-backgrounds=" "$SLICK_GREETER_CONF" 2>/dev/null; then
-            sudo sed -i "s|^draw-user-backgrounds=.*|draw-user-backgrounds=false|" "$SLICK_GREETER_CONF"
-        else
-            sudo sed -i "/^\[Greeter\]/a draw-user-backgrounds=false" "$SLICK_GREETER_CONF"
-        fi
-    fi
-fi
-
 if [[ -d "$SCRIPT_DIR/bleachbit" ]]; then
     sudo mkdir -p /root/.config/bleachbit
     sudo cp -af "$SCRIPT_DIR/bleachbit/." /root/.config/bleachbit/
@@ -533,50 +471,6 @@ if command -v zsh &>/dev/null; then
 fi
 
 show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
-
-if [[ -d "$SCRIPT_DIR/.config" ]]; then cp -af "$SCRIPT_DIR/.config/." ~/.config/; fi
-if [[ -d "$SCRIPT_DIR/.local" ]]; then cp -af "$SCRIPT_DIR/.local/." ~/.local/; fi
-if [[ -d "$SCRIPT_DIR/.icons" ]]; then cp -af "$SCRIPT_DIR/.icons/." ~/.icons/; fi
-if [[ -d "$SCRIPT_DIR/.themes" ]]; then cp -af "$SCRIPT_DIR/.themes/." ~/.themes/; fi
-
-if [[ "$OLD_USER_PLACEHOLDER" != "$CURRENT_USER" ]]; then
-    for dir in ~/.config ~/.local ~/.icons ~/.themes; do
-        [[ -d "$dir" ]] || continue
-        find "$dir" -type f -exec sed -i "s|/home/$OLD_USER_PLACEHOLDER|/home/$CURRENT_USER|g" {} + 2>/dev/null || true
-    done
-fi
-
-if [[ -n "$CHOSEN_WALLPAPER" ]]; then
-    if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-        gsettings set org.cinnamon.desktop.background picture-uri "''" 2>/dev/null || true
-        gsettings set org.cinnamon.desktop.background picture-uri "file://$CHOSEN_WALLPAPER" || true
-        gsettings set org.cinnamon.desktop.background picture-uri-dark "file://$CHOSEN_WALLPAPER" 2>/dev/null || true
-    fi
-fi
-
-if [[ -f "$SCRIPT_DIR/dconf-settings.ini" ]]; then
-    if command -v dconf &>/dev/null; then
-        sed -i 's/\r$//' "$SCRIPT_DIR/dconf-settings.ini"
-        mkdir -p "$HOME/.config/dconf"
-        sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$HOME/.config"
-        DCONF_ERR_LOG="/tmp/dconf_err_$$"
-        dbus-run-session dconf load / < "$SCRIPT_DIR/dconf-settings.ini" 2>"$DCONF_ERR_LOG" || true
-        rm -f "$DCONF_ERR_LOG"
-    fi
-fi
-
-killall cinnamon 2>/dev/null || true
-sleep 3
-rm -rf ~/.cache/icon-cache.kcache ~/.cache/cinnamon* ~/.cache/ico*
-update-desktop-database ~/.local/share/applications 2>/dev/null || true
-gtk-update-icon-cache -f ~/.icons/* 2>/dev/null || true
-
-if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-    (cinnamon --replace &>/dev/null &)
-    sleep 5
-    killall cinnamon 2>/dev/null || true
-    sleep 2
-fi
 
 # ==========================================================
 # 4. ZAKOŃCZENIE I SPRZĄTANIE
