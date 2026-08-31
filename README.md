@@ -1,6 +1,6 @@
 # 🚀 Linux Mint : Comprehensive Configuration Script
 
-An automated, powerful Bash script designed to transform a clean **Linux Mint** installation with the desktop into a complete, optimized workstation ready for both work and entertainment.
+An automated, powerful Bash script designed to transform a clean **Linux Mint** installation with a complete, optimized workstation ready for both work and entertainment.
 
 
 ---
