@@ -506,4 +506,21 @@ else
     echo -e "${SUCCESS}✔ CONFIGURATION COMPLETED SUCCESSFULLY!${NC}" >&3
 fi
 
-systemctl reboot
+# ==========================================================
+# 5. RESTART SYSTEMU
+# ==========================================================
+if [[ "$SCRIPT_LANG" == "pl" ]]; then
+    RESTART_PROMPT="Czy chcesz teraz zrestartować system? [Y/N]: "
+else
+    RESTART_PROMPT="Do you want to restart the system now? [Y/N]: "
+fi
+echo -en "${INFO}==> ${RESTART_PROMPT}${NC}" >&3
+read -r RESTART_CHOICE < /dev/tty
+case "$RESTART_CHOICE" in
+    [Yy]*)
+        systemctl reboot
+        ;;
+    *)
+        exit 0
+        ;;
+esac
