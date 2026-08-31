@@ -80,8 +80,6 @@ If you find this tool helpful and it saved you some time, consider buying me a c
 
 [![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/bartekszczecinski)
 
-<img width="1280" height="800" alt="Screenshot_ubuntu25 10_2026-07-20_18:52:25" src="https://github.com/user-attachments/assets/a46bc512-b785-4917-927d-43d62822830c" />
-
 ---
 
 If you find this project useful, leave a star! ⭐
