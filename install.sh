@@ -17,6 +17,24 @@ detect_system_lang() {
 }
 SCRIPT_LANG="$(detect_system_lang)"
 
+detect_system_locale() {
+    local sys_locale="${LANG:-}"
+    [[ -z "$sys_locale" ]] && sys_locale="${LC_ALL:-${LC_MESSAGES:-}}"
+    [[ -z "$sys_locale" ]] && sys_locale="en_US.UTF-8"
+
+    if command -v locale &>/dev/null; then
+        local available
+        available="$(locale -a 2>/dev/null)"
+        if echo "$available" | grep -qiF "$sys_locale" || \
+           echo "$available" | grep -qiF "$(echo "$sys_locale" | sed 's/UTF-8/utf8/')"; then
+            echo "$sys_locale"
+            return
+        fi
+    fi
+    echo "en_US.UTF-8"
+}
+SYSTEM_LOCALE="$(detect_system_locale)"
+
 INFO='\033[0;34m'
 SUCCESS='\033[0;32m'
 WARN='\033[0;33m'
@@ -463,7 +481,7 @@ if command -v zsh &>/dev/null; then
     if [[ -f "$ZSHRC" ]]; then
         sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' "$ZSHRC" || true
         sed -i 's/^plugins=(.*/plugins=(git sudo systemd debian)/' "$ZSHRC" || true
-        grep -q "LC_ALL=pl_PL.UTF-8" "$ZSHRC" || echo "export LC_ALL=pl_PL.UTF-8" >> "$ZSHRC"
+        grep -q "LC_ALL=$SYSTEM_LOCALE" "$ZSHRC" || echo "export LC_ALL=$SYSTEM_LOCALE" >> "$ZSHRC"
         grep -q "^fastfetch"         "$ZSHRC" || echo "fastfetch"                  >> "$ZSHRC"
         grep -q "zsh-syntax-highlighting.zsh" "$ZSHRC" || echo "source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> "$ZSHRC"
         grep -q "zsh-autosuggestions.zsh"     "$ZSHRC" || echo "source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh"         >> "$ZSHRC"
