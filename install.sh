@@ -242,6 +242,16 @@ if [[ -f "$SCRIPT_DIR/.update.sh" ]]; then
     chmod +x ~/.update.sh
 fi
 
+if [[ -d "$SCRIPT_DIR/.local" ]]; then
+    mkdir -p ~/.local
+    cp -afT "$SCRIPT_DIR/.local" ~/.local
+fi
+
+if [[ -d "$SCRIPT_DIR/.config" ]]; then
+    mkdir -p ~/.config
+    cp -afT "$SCRIPT_DIR/.config" ~/.config
+fi
+
 wait_for_apt
 sudo sed -i '/cdrom/s/^/#/' /etc/apt/sources.list 2>/dev/null || true
 sudo dpkg --add-architecture i386 || true
