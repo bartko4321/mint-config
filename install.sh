@@ -351,6 +351,21 @@ fi
 
 add_ppa_and_install "cdemu/ppa" cdemu-daemon cdemu-client || true
 
+sudo systemctl disable --now cdemu-daemon 2>/dev/null || true
+sudo systemctl mask cdemu-daemon 2>/dev/null || true
+mkdir -p "$HOME/.config/autostart"
+for f in /etc/xdg/autostart/gcdemu.desktop /etc/xdg/autostart/cdemu.desktop /usr/share/applications/gcdemu.desktop; do
+    if [[ -f "$f" ]]; then
+        cp -f "$f" "$HOME/.config/autostart/$(basename "$f")"
+        if grep -q '^Hidden=' "$HOME/.config/autostart/$(basename "$f")"; then
+            sed -i 's/^Hidden=.*/Hidden=true/' "$HOME/.config/autostart/$(basename "$f")"
+        else
+            echo "Hidden=true" >> "$HOME/.config/autostart/$(basename "$f")"
+        fi
+    fi
+done
+pkill -f gcdemu 2>/dev/null || true
+
 if command -v flatpak &>/dev/null; then
     sudo flatpak install -y flathub com.github.tchx84.Flatseal || true
 fi
