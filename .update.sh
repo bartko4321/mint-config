@@ -8,11 +8,14 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 detect_lang() {
-    local l="${LANG:-}${LANGUAGE:-}${LC_ALL:-}"
+    local l="${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
+    if [ -z "$l" ] && command -v locale &> /dev/null; then
+        l=$(locale 2>/dev/null | grep -m1 '^LANG=' | cut -d= -f2)
+    fi
     case "$l" in
-        pl_PL*|*pl_PL*|pl*) echo "pl" ;;
+        pl_PL*|pl*) echo "pl" ;;
         *) echo "en" ;;
-    esac
+    esac 
 }
 SCRIPT_LANG=$(detect_lang)
 
@@ -26,6 +29,7 @@ if [ "$SCRIPT_LANG" = "pl" ]; then
     MSG_DONE="AKTUALIZACJA I CZYSZCZENIE ZAKOŃCZONE!"
     MSG_RESTART_WARN="UWAGA: Zalecany jest restart komputera"
     MSG_NO_RESTART="Restart systemu nie jest aktualnie wymagany."
+    MSG_PRESS_ENTER="Naciśnij Enter, aby zamknąć okno..."
 else
     MSG_TITLE="         COMPREHENSIVE UPDATE AND CLEANUP SCRIPT       "
     MSG_ASK_PASS="Please enter the administrator (sudo) password:"
@@ -36,6 +40,7 @@ else
     MSG_DONE="UPDATE AND CLEANUP COMPLETE!"
     MSG_RESTART_WARN="WARNING: A system restart is recommended"
     MSG_NO_RESTART="A system restart is not currently required."
+    MSG_PRESS_ENTER="Press Enter to close this window..."
 fi
 
 TMP_LOG="$(mktemp /tmp/update-log.XXXXXX)"
@@ -57,6 +62,7 @@ cleanup_on_exit() {
         fi
     fi
     rm -f "$TMP_LOG"
+    kill "${SUDO_KEEP_ALIVE_PID:-}" 2>/dev/null
 }
 trap cleanup_on_exit EXIT
 
@@ -95,81 +101,6 @@ show_progress() {
     printf "\r\033[K[\033[1;32m%s\033[0;90m%s\033[0m] %3d%% | \033[1;36m%s\033[0m" "$bar_filled" "$bar_empty" "$percent" "$msg" >&3
 }
 
-update_cinnamon_spices() {
-    if ! command -v curl &> /dev/null || ! command -v jq &> /dev/null || ! command -v unzip &> /dev/null; then
-        return
-    fi
-
-    local base_dir="$HOME/.local/share/cinnamon"
-    local types=(applet desklet extension)
-    local tmp_root
-    tmp_root=$(mktemp -d)
-
-    for type in "${types[@]}"; do
-        local type_plural="${type}s"
-        local install_dir="$base_dir/${type_plural}"
-        [ -d "$install_dir" ] || continue
-
-        local index_json
-        index_json=$(curl -fsSL "https://cinnamon-spices.linuxmint.com/json/${type_plural}.json" 2>/dev/null)
-        [ -z "$index_json" ] && continue
-        echo "$index_json" | jq -e . >/dev/null 2>&1 || continue
-
-        for xlet_dir in "$install_dir"/*; do
-            [ -d "$xlet_dir" ] || continue
-            local meta_file="$xlet_dir/metadata.json"
-            [ -f "$meta_file" ] || continue
-
-            local uuid
-            uuid=$(basename "$xlet_dir")
-
-            local remote_edited
-            remote_edited=$(echo "$index_json" | jq -r --arg u "$uuid" '.[$u]["last_edited"] // empty' 2>/dev/null)
-            [ -z "$remote_edited" ] && continue
-
-            local local_edited
-            local_edited=$(jq -r '.["last-edited"] // .["last_edited"] // empty' "$meta_file" 2>/dev/null)
-
-            if [ -n "$local_edited" ] && [ "$local_edited" -ge "$remote_edited" ] 2>/dev/null; then
-                continue
-            fi
-
-            local zip_file="$tmp_root/$uuid.zip"
-            if ! curl -fsSL "https://cinnamon-spices.linuxmint.com/files/${uuid}.zip" -o "$zip_file" 2>/dev/null; then
-                continue
-            fi
-
-            local extract_dir="$tmp_root/extract_$uuid"
-            mkdir -p "$extract_dir"
-            if ! unzip -qq -o "$zip_file" -d "$extract_dir" 2>/dev/null; then
-                rm -rf "$extract_dir" "$zip_file"
-                continue
-            fi
-
-            local source_dir="$extract_dir/$uuid/files/$uuid"
-            [ -d "$source_dir" ] || source_dir="$extract_dir/$uuid"
-            if [ ! -d "$source_dir" ]; then
-                rm -rf "$extract_dir" "$zip_file"
-                continue
-            fi
-
-            local backup_dir="$tmp_root/backup_$uuid"
-            cp -a "$xlet_dir" "$backup_dir" 2>/dev/null
-
-            if rm -rf "$xlet_dir" && cp -a "$source_dir" "$xlet_dir"; then
-                :
-            else
-                rm -rf "$xlet_dir"
-                cp -a "$backup_dir" "$xlet_dir" 2>/dev/null
-            fi
-
-            rm -rf "$extract_dir" "$zip_file" "$backup_dir"
-        done
-    done
-
-    rm -rf "$tmp_root"
-}
-
 echo -e "${BLUE}======================================================${NC}" >&3
 echo -e "${BLUE}${MSG_TITLE}${NC}" >&3
 echo -e "${BLUE}======================================================${NC}" >&3
@@ -180,20 +111,16 @@ while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 SUDO_KEEP_ALIVE_PID=$!
 
 REBOOT_NEEDED=false
-TOTAL_STEPS=24
+FWUPD_RESTART_NEEDED=false
+TOTAL_STEPS=21
 STEP=0
 show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
 # ---------------------------------------------------------------
 # PHASE: UPDATE
 # ---------------------------------------------------------------
-sudo apt-get update 2>&1 | grep -v "nie obsługuje architektury\|Pomijanie pozyskania skonfigurowanego pliku"
+sudo apt-get update 2>&1 | grep -v "nie obsługuje architektury\|Pomijanie pozyskania skonfigurowanego pliku\|does not support architecture\|Skipping acquire of configured file"
 sudo apt-get dist-upgrade -y
-STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
-
-if command -v mintupdate-cli &> /dev/null; then
-    sudo mintupdate-cli upgrade -y 2>/dev/null
-fi
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
 if command -v flatpak &> /dev/null; then
@@ -201,13 +128,23 @@ if command -v flatpak &> /dev/null; then
 fi
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
-update_cinnamon_spices
+if command -v gext &> /dev/null; then
+    gext update
+fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
+
+if command -v cinnamon-spice-updater &> /dev/null; then
+    cinnamon-spice-updater --update-all
+fi
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
 if command -v fwupdmgr &> /dev/null; then
-    sudo fwupdmgr refresh --force 2>/dev/null
-    sudo fwupdmgr get-updates 2>/dev/null
-    sudo fwupdmgr update -y 2>/dev/null
+    sudo fwupdmgr refresh --force
+    FWUPD_OUT=$(sudo fwupdmgr update -y 2>&1)
+    echo "$FWUPD_OUT"
+    if echo "$FWUPD_OUT" | grep -qiE "restart|reboot"; then
+        FWUPD_RESTART_NEEDED=true
+    fi
 fi
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
@@ -271,19 +208,12 @@ sudo find /tmp -type f -atime +3 -delete 2>/dev/null
 sudo find /var/tmp -type f -atime +3 -delete 2>/dev/null
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-if command -v mintsystem &> /dev/null; then
-    sudo mintsystem removekernels 2>/dev/null
-else
-    CURRENT_KERNEL=$(uname -r)
-    KERNEL_PACKAGES=$(dpkg -l | grep -E 'linux-image-[0-9]' | awk '{print $2}' | grep -v "$CURRENT_KERNEL")
-    if [ -n "$KERNEL_PACKAGES" ]; then
-        sudo apt-get purge $KERNEL_PACKAGES -y
-        REBOOT_NEEDED=true
-    fi
+CURRENT_KERNEL=$(uname -r)
+KERNEL_PACKAGES=$(dpkg -l | grep -E 'linux-image-[0-9]' | awk '{print $2}' | grep -v "$CURRENT_KERNEL")
+if [ -n "$KERNEL_PACKAGES" ]; then
+    sudo apt-get purge $KERNEL_PACKAGES -y
+    REBOOT_NEEDED=true
 fi
-STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
-
-sudo update-grub 2>/dev/null
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
 # ---------------------------------------------------------------
@@ -299,11 +229,6 @@ find ~/.cache -type f -atime +14 \
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
 find ~/.cache/thumbnails -type f -atime +7 -delete 2>/dev/null
-STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
-
-rm -rf ~/.cache/cinnamon/* 2>/dev/null
-rm -rf ~/.cache/nemo/* 2>/dev/null
-rm -rf ~/.local/share/cinnamon/spices-cache/* 2>/dev/null
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
 if command -v flatpak &> /dev/null; then
@@ -336,9 +261,6 @@ fi
 rm -rf "$HOME/.cache/virt-manager" 2>/dev/null
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_RESTART"
 
-nemo -q 2>/dev/null
-STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_RESTART"
-
 # ---------------------------------------------------------------
 # PHASE: RESTART CHECK
 # ---------------------------------------------------------------
@@ -347,7 +269,10 @@ if [ -f /var/run/reboot-required ]; then
 fi
 STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_RESTART"
 
-kill "$SUDO_KEEP_ALIVE_PID" 2>/dev/null
+if [ "$FWUPD_RESTART_NEEDED" = true ]; then
+    REBOOT_NEEDED=true
+fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_RESTART"
 
 echo -e "\n" >&3
 echo -e "${GREEN}======================================================${NC}" >&3
@@ -356,6 +281,8 @@ echo -e "${GREEN}======================================================${NC}" >&
 
 if [ "$REBOOT_NEEDED" = true ]; then
     echo -e "${YELLOW}${MSG_RESTART_WARN}${NC}" >&3
+    echo -e "${YELLOW}${MSG_PRESS_ENTER}${NC}" >&3
+    read -r
 else
     echo -e "${GREEN}${MSG_NO_RESTART}${NC}" >&3
 fi
