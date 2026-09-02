@@ -453,6 +453,52 @@ show_progress 8 $TOTAL_STEPS "$MSG_PHASE_3"
 wait_for_apt
 sudo apt-get install -yq virt-manager qemu-system qemu-utils libvirt-daemon-system libvirt-clients ovmf dnsmasq bluetooth bluez bluez-firmware bluez-tools ufw || true
 
+dconf load /org/virt-manager/virt-manager/ <<'EOF'
+[/]
+manager-window-height=297
+manager-window-width=478
+xmleditor-enabled=true
+
+[confirm]
+delete-storage=false
+forcepoweroff=false
+
+[connections]
+autoconnect=['qemu:///system']
+uris=['qemu:///system']
+
+[conns/qemu:system]
+window-size=(800, 600)
+
+[details]
+show-toolbar=true
+
+[new-vm]
+cpu-default='host-passthrough'
+firmware='uefi'
+graphics-type='spice'
+storage-format='raw'
+
+[paths]
+media-default='/home/bartek/Pobrane'
+
+[stats]
+enable-disk-poll=true
+enable-memory-poll=true
+enable-net-poll=true
+
+[urls]
+isos=['/var/lib/libvirt/images/archlinux.img', '/home/bartek/Pobrane/archlinux-2026.09.01-x86_64.iso']
+
+[vmlist-fields]
+disk-usage=false
+network-traffic=false
+
+[vms/2a91721fef6c4249997ea19b01801825]
+autoconnect=1
+vm-window-size=(1280, 842)
+EOF
+
 for svc in libvirtd virtqemud; do
     if systemctl list-unit-files "${svc}.service" 2>/dev/null | grep -q "$svc"; then
         sudo systemctl enable --now "${svc}.service" || true
