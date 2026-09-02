@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -13,141 +14,96 @@ detect_lang() {
         *) echo "en" ;;
     esac
 }
-LANGCODE=$(detect_lang)
+SCRIPT_LANG=$(detect_lang)
 
-t() {
-    local key="$1"
-    if [ "$LANGCODE" = "pl" ]; then
-        case "$key" in
-            title1) echo "=====================================================" ;;
-            title2) echo "  KOMPLEKSOWY SKRYPT AKTUALIZACJI I CZYSZCZENIA       " ;;
-            title3) echo "          LINUX MINT (CINNAMON)                      " ;;
-            ask_password) echo "Proszę podać hasło administratora (sudo):" ;;
-            apt_update) echo "==> Pełna aktualizacja systemu (APT)..." ;;
-            mintupdate) echo "==> Sprawdzanie aktualizacji przez mintupdate-cli..." ;;
-            flatpak_update) echo "==> Pełna aktualizacja aplikacji Flatpak..." ;;
-            spices_section) echo "==> Aktualizacja rozszerzeń Cinnamon (aplety/dekstlety/rozszerzenia)..." ;;
-            spices_missing_tools) echo "==> Brak curl/jq/unzip - pomijam aktualizację rozszerzeń Cinnamon." ;;
-            spices_updating) echo "Aktualizowanie" ;;
-            spices_updated) echo "Zaktualizowano" ;;
-            spices_up_to_date) echo "==> Wszystkie zainstalowane rozszerzenia Cinnamon są aktualne." ;;
-            spices_none) echo "==> Brak zainstalowanych rozszerzeń Cinnamon (aplety/dekstlety/rozszerzenia)." ;;
-            spices_download_failed) echo "Błąd aktualizacji" ;;
-            spices_backup_restored) echo "Przywrócono poprzednią wersję po nieudanej aktualizacji" ;;
-            firmware_section) echo "==> Aktualizacja firmware (fwupd)..." ;;
-            firmware_refresh) echo "==> Odświeżanie bazy metadanych firmware..." ;;
-            firmware_check) echo "==> Sprawdzanie dostępnych aktualizacji firmware..." ;;
-            firmware_apply) echo "==> Instalowanie dostępnych aktualizacji firmware..." ;;
-            firmware_reboot) echo "UWAGA: Niektóre aktualizacje firmware wymagają ponownego uruchomienia komputera!" ;;
-            firmware_absent) echo "==> fwupd nieobecny - pomijam aktualizację firmware." ;;
-            phase1) echo "--- FAZA 1: SYSTEM (SUDO) ---" ;;
-            autoremove) echo "==> Usuwanie osieroconych pakietów i zbędnych zależności..." ;;
-            deborphan) echo "==> Usuwanie osieroconych bibliotek (deborphan)..." ;;
-            apt_keys) echo "==> Aktualizacja bazy kluczy zaufanych..." ;;
-            apt_clean) echo "==> Czyszczenie cache pobierania APT (stare pakiety)..." ;;
-            ppa_clean) echo "==> Usuwanie nieużywanych repozytoriów (PPA/listy)..." ;;
-            flatpak_clean_system) echo "==> Kompleksowe czyszczenie Flatpak (System)..." ;;
-            flatpak_remote_removed) echo "Usuwanie nieużywanego źródła Flatpak:" ;;
-            flatpak_orphan_system) echo "==> Czyszczenie osieroconych danych po usuniętych aplikacjach w /var/app..." ;;
-            flatpak_orphan_removed_system) echo "Usuwanie osieroconych danych systemowych w /var/app:" ;;
-            flatpak_absent) echo "==> Flatpak nieobecny - pomijam czyszczenie systemowe." ;;
-            journal_clean) echo "==> Czyszczenie logów (Journalctl + /var/log)..." ;;
-            tmp_clean) echo "==> Czyszczenie starego /tmp i /var/tmp (starsze niż 3 dni)..." ;;
-            kernel_clean) echo "==> Usuwanie starych kerneli (mintsystem / dpkg)..." ;;
-            kernel_removing) echo "Usuwanie:" ;;
-            kernel_current_only) echo "Tylko aktualny kernel w systemie." ;;
-            grub_update) echo "==> Aktualizacja GRUB po zmianach kerneli..." ;;
-            phase2) echo "--- FAZA 2: UŻYTKOWNIK (REAL USER) ---" ;;
-            cache_clean) echo "==> Czyszczenie starego cache (omijanie przeglądarek)..." ;;
-            thumbnails_clean) echo "==> Czyszczenie starych miniatur (Nemo)..." ;;
-            cinnamon_nemo_clean) echo "==> Czyszczenie cache Cinnamon i Nemo..." ;;
-            flatpak_user_clean) echo "==> Czyszczenie Flatpak (Użytkownik)..." ;;
-            flatpak_orphan_user) echo "==> Czyszczenie osieroconych danych po usuniętych aplikacjach w ~/.var/app..." ;;
-            flatpak_orphan_removed_user) echo "Usuwanie osieroconych danych użytkownika w ~/.var/app:" ;;
-            fontcache) echo "==> Odświeżanie cache czcionek..." ;;
-            virtmanager_clean) echo "==> Czyszczenie virt-manager i reset dconf..." ;;
-            dconf_done) echo "==> dconf reset wykonany." ;;
-            nemo_restart) echo "==> Restart Nemo (zastosowanie czyszczenia cache)..." ;;
-            done_title) echo "     AKTUALIZACJA I CZYSZCZENIE ZAKOŃCZONE!          " ;;
-            checking_state) echo "==> Sprawdzanie stanu systemu..." ;;
-            reboot_warn) echo " UWAGA: Zainstalowano nowy kernel lub ważne pakiety!  " ;;
-            reboot_recommend) echo " ZALECANY JEST RESTART KOMPUTERA!                     " ;;
-            reboot_not_required) echo "==> Restart systemu nie jest aktualnie wymagany." ;;
-            press_enter) echo "Naciśnij [ENTER], aby zakończyć..." ;;
-        esac
-    else
-        case "$key" in
-            title1) echo "=====================================================" ;;
-            title2) echo "  COMPREHENSIVE UPDATE AND CLEANUP SCRIPT             " ;;
-            title3) echo "          LINUX MINT (CINNAMON)                      " ;;
-            ask_password) echo "Please enter your administrator (sudo) password:" ;;
-            apt_update) echo "==> Full system update (APT)..." ;;
-            mintupdate) echo "==> Checking for updates via mintupdate-cli..." ;;
-            flatpak_update) echo "==> Full Flatpak application update..." ;;
-            spices_section) echo "==> Updating Cinnamon Spices (applets/desklets/extensions)..." ;;
-            spices_missing_tools) echo "==> curl/jq/unzip not found - skipping Cinnamon Spices update." ;;
-            spices_updating) echo "Updating" ;;
-            spices_updated) echo "Updated" ;;
-            spices_up_to_date) echo "==> All installed Cinnamon Spices are up to date." ;;
-            spices_none) echo "==> No installed Cinnamon Spices (applets/desklets/extensions) found." ;;
-            spices_download_failed) echo "Update failed" ;;
-            spices_backup_restored) echo "Restored previous version after failed update" ;;
-            firmware_section) echo "==> Firmware update (fwupd)..." ;;
-            firmware_refresh) echo "==> Refreshing firmware metadata..." ;;
-            firmware_check) echo "==> Checking for available firmware updates..." ;;
-            firmware_apply) echo "==> Installing available firmware updates..." ;;
-            firmware_reboot) echo "NOTE: Some firmware updates require a system reboot!" ;;
-            firmware_absent) echo "==> fwupd not found - skipping firmware update." ;;
-            phase1) echo "--- PHASE 1: SYSTEM (SUDO) ---" ;;
-            autoremove) echo "==> Removing orphaned packages and unnecessary dependencies..." ;;
-            deborphan) echo "==> Removing orphaned libraries (deborphan)..." ;;
-            apt_keys) echo "==> Updating trusted keys database..." ;;
-            apt_clean) echo "==> Cleaning APT download cache (old packages)..." ;;
-            ppa_clean) echo "==> Removing unused repositories (PPA/lists)..." ;;
-            flatpak_clean_system) echo "==> Comprehensive Flatpak cleanup (System)..." ;;
-            flatpak_remote_removed) echo "Removing unused Flatpak remote:" ;;
-            flatpak_orphan_system) echo "==> Cleaning orphaned data from removed apps in /var/app..." ;;
-            flatpak_orphan_removed_system) echo "Removing orphaned system data in /var/app:" ;;
-            flatpak_absent) echo "==> Flatpak not found - skipping system cleanup." ;;
-            journal_clean) echo "==> Cleaning logs (Journalctl + /var/log)..." ;;
-            tmp_clean) echo "==> Cleaning old /tmp and /var/tmp (older than 3 days)..." ;;
-            kernel_clean) echo "==> Removing old kernels (mintsystem / dpkg)..." ;;
-            kernel_removing) echo "Removing:" ;;
-            kernel_current_only) echo "Only the current kernel is installed." ;;
-            grub_update) echo "==> Updating GRUB after kernel changes..." ;;
-            phase2) echo "--- PHASE 2: USER (REAL USER) ---" ;;
-            cache_clean) echo "==> Cleaning old cache (excluding browsers)..." ;;
-            thumbnails_clean) echo "==> Cleaning old thumbnails (Nemo)..." ;;
-            cinnamon_nemo_clean) echo "==> Cleaning Cinnamon and Nemo cache..." ;;
-            flatpak_user_clean) echo "==> Cleaning Flatpak (User)..." ;;
-            flatpak_orphan_user) echo "==> Cleaning orphaned data from removed apps in ~/.var/app..." ;;
-            flatpak_orphan_removed_user) echo "Removing orphaned user data in ~/.var/app:" ;;
-            fontcache) echo "==> Refreshing font cache..." ;;
-            virtmanager_clean) echo "==> Cleaning virt-manager and resetting dconf..." ;;
-            dconf_done) echo "==> dconf reset completed." ;;
-            nemo_restart) echo "==> Restarting Nemo (applying cache cleanup)..." ;;
-            done_title) echo "     UPDATE AND CLEANUP COMPLETE!                    " ;;
-            checking_state) echo "==> Checking system state..." ;;
-            reboot_warn) echo " WARNING: A new kernel or important packages were installed! " ;;
-            reboot_recommend) echo " A SYSTEM REBOOT IS RECOMMENDED!                      " ;;
-            reboot_not_required) echo "==> A system reboot is not currently required." ;;
-            press_enter) echo "Press [ENTER] to finish..." ;;
-        esac
+if [ "$SCRIPT_LANG" = "pl" ]; then
+    MSG_TITLE="       KOMPLEKSOWY SKRYPT AKTUALIZACJI I CZYSZCZENIA  "
+    MSG_ASK_PASS="Proszę podać hasło administratora (sudo):"
+    MSG_PHASE_UPDATE="[1/4] Aktualizacja systemu i aplikacji..."
+    MSG_PHASE_CLEAN_SYS="[2/4] Czyszczenie systemowe (sudo)..."
+    MSG_PHASE_CLEAN_USER="[3/4] Czyszczenie użytkownika..."
+    MSG_PHASE_RESTART="[4/4] Sprawdzanie konieczności restartu..."
+    MSG_DONE="AKTUALIZACJA I CZYSZCZENIE ZAKOŃCZONE!"
+    MSG_RESTART_WARN="UWAGA: Zalecany jest restart komputera (zaktualizowano kernel/firmware/kluczowe komponenty)."
+    MSG_NO_RESTART="Restart systemu nie jest aktualnie wymagany."
+else
+    MSG_TITLE="         COMPREHENSIVE UPDATE AND CLEANUP SCRIPT       "
+    MSG_ASK_PASS="Please enter the administrator (sudo) password:"
+    MSG_PHASE_UPDATE="[1/4] Updating system and applications..."
+    MSG_PHASE_CLEAN_SYS="[2/4] System cleanup (sudo)..."
+    MSG_PHASE_CLEAN_USER="[3/4] User cleanup..."
+    MSG_PHASE_RESTART="[4/4] Checking if a restart is needed..."
+    MSG_DONE="UPDATE AND CLEANUP COMPLETE!"
+    MSG_RESTART_WARN="WARNING: A system restart is recommended (kernel/firmware/critical components were updated)."
+    MSG_NO_RESTART="A system restart is not currently required."
+fi
+
+TMP_LOG="$(mktemp /tmp/update-log.XXXXXX)"
+LOG_FILE="$HOME/update_error_$(date +%Y%m%d_%H%M%S).log"
+
+# fd 3 = real terminal (progress bar / final messages only).
+# stdout+stderr of everything else is redirected into the log file.
+exec 3>&1
+exec >>"$TMP_LOG" 2>&1
+
+cleanup_on_exit() {
+    local exit_code=$?
+    printf '\033[?25h' >&3
+    echo "" >&3
+    if [ "$exit_code" -ne 0 ]; then
+        cp -f "$TMP_LOG" "$LOG_FILE" 2>/dev/null || true
+        if [ "$SCRIPT_LANG" = "pl" ]; then
+            echo -e "${RED}✘ Wystąpił błąd (kod: $exit_code). Szczegółowy log zapisano w: $LOG_FILE${NC}" >&3
+        else
+            echo -e "${RED}✘ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
+        fi
     fi
+    rm -f "$TMP_LOG"
+}
+trap cleanup_on_exit EXIT
+
+show_progress() {
+    local step=$1
+    local total=$2
+    local msg=$3
+    local percent=$(( step * 100 / total ))
+
+    local cols
+    cols=$(tput cols 2>/dev/null)
+    [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+
+    local bar_width=50
+    local reserved=12
+    if (( cols - reserved < bar_width )); then
+        bar_width=$(( cols - reserved ))
+        (( bar_width < 10 )) && bar_width=10
+    fi
+
+    local overhead=$(( bar_width + reserved ))
+    local avail=$(( cols - overhead ))
+    if (( avail < 5 )); then avail=5; fi
+    if (( ${#msg} > avail )); then
+        msg="${msg:0:$((avail - 1))}…"
+    fi
+
+    local filled=$(( percent * bar_width / 100 ))
+    local empty=$(( bar_width - filled ))
+
+    local bar_filled=""
+    local bar_empty=""
+    if [ $filled -gt 0 ]; then printf -v bar_filled '%*s' "$filled" ''; bar_filled="${bar_filled// /#}"; fi
+    if [ $empty -gt 0 ]; then printf -v bar_empty '%*s' "$empty" ''; bar_empty="${bar_empty// /-}"; fi
+
+    printf "\r\033[K[\033[1;32m%s\033[0;90m%s\033[0m] %3d%% | \033[1;36m%s\033[0m" "$bar_filled" "$bar_empty" "$percent" "$msg" >&3
 }
 
 update_cinnamon_spices() {
-    echo -e "\n${GREEN}$(t spices_section)${NC}"
-
     if ! command -v curl &> /dev/null || ! command -v jq &> /dev/null || ! command -v unzip &> /dev/null; then
-        echo -e "${YELLOW}$(t spices_missing_tools)${NC}"
         return
     fi
 
     local base_dir="$HOME/.local/share/cinnamon"
     local types=(applet desklet extension)
-    local any_found=0
-    local any_updated=0
     local tmp_root
     tmp_root=$(mktemp -d)
 
@@ -168,7 +124,6 @@ update_cinnamon_spices() {
 
             local uuid
             uuid=$(basename "$xlet_dir")
-            any_found=1
 
             local remote_edited
             remote_edited=$(echo "$index_json" | jq -r --arg u "$uuid" '.[$u]["last_edited"] // empty' 2>/dev/null)
@@ -181,18 +136,14 @@ update_cinnamon_spices() {
                 continue
             fi
 
-            echo -e "${YELLOW}$(t spices_updating): [$type] $uuid${NC}"
-
             local zip_file="$tmp_root/$uuid.zip"
             if ! curl -fsSL "https://cinnamon-spices.linuxmint.com/files/${uuid}.zip" -o "$zip_file" 2>/dev/null; then
-                echo -e "${RED}$(t spices_download_failed): $uuid${NC}"
                 continue
             fi
 
             local extract_dir="$tmp_root/extract_$uuid"
             mkdir -p "$extract_dir"
             if ! unzip -qq -o "$zip_file" -d "$extract_dir" 2>/dev/null; then
-                echo -e "${RED}$(t spices_download_failed): $uuid${NC}"
                 rm -rf "$extract_dir" "$zip_file"
                 continue
             fi
@@ -200,7 +151,6 @@ update_cinnamon_spices() {
             local source_dir="$extract_dir/$uuid/files/$uuid"
             [ -d "$source_dir" ] || source_dir="$extract_dir/$uuid"
             if [ ! -d "$source_dir" ]; then
-                echo -e "${RED}$(t spices_download_failed): $uuid${NC}"
                 rm -rf "$extract_dir" "$zip_file"
                 continue
             fi
@@ -209,12 +159,10 @@ update_cinnamon_spices() {
             cp -a "$xlet_dir" "$backup_dir" 2>/dev/null
 
             if rm -rf "$xlet_dir" && cp -a "$source_dir" "$xlet_dir"; then
-                echo -e "${GREEN}$(t spices_updated): [$type] $uuid${NC}"
-                any_updated=1
+                :
             else
                 rm -rf "$xlet_dir"
                 cp -a "$backup_dir" "$xlet_dir" 2>/dev/null
-                echo -e "${RED}$(t spices_download_failed): $uuid - $(t spices_backup_restored)${NC}"
             fi
 
             rm -rf "$extract_dir" "$zip_file" "$backup_dir"
@@ -222,87 +170,78 @@ update_cinnamon_spices() {
     done
 
     rm -rf "$tmp_root"
-
-    if [ "$any_found" -eq 0 ]; then
-        echo -e "${YELLOW}$(t spices_none)${NC}"
-    elif [ "$any_updated" -eq 0 ]; then
-        echo -e "${GREEN}$(t spices_up_to_date)${NC}"
-    fi
 }
 
-echo -e "${BLUE}$(t title1)${NC}"
-echo -e "${BLUE}$(t title2)${NC}"
-echo -e "${BLUE}$(t title3)${NC}"
-echo -e "${BLUE}$(t title1)${NC}"
-
-echo -e "${YELLOW}$(t ask_password)${NC}"
-sudo -v
+echo -e "${BLUE}======================================================${NC}" >&3
+echo -e "${BLUE}${MSG_TITLE}${NC}" >&3
+echo -e "${BLUE}======================================================${NC}" >&3
+echo -e "${YELLOW}${MSG_ASK_PASS}${NC}" >&3
+sudo -v >&3
 
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 SUDO_KEEP_ALIVE_PID=$!
 
-echo -e "\n${GREEN}$(t apt_update)${NC}"
+REBOOT_NEEDED=false
+TOTAL_STEPS=24
+STEP=0
+show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
+# ---------------------------------------------------------------
+# PHASE: UPDATE
+# ---------------------------------------------------------------
 sudo apt-get update 2>&1 | grep -v "nie obsługuje architektury\|Pomijanie pozyskania skonfigurowanego pliku"
-
 sudo apt-get dist-upgrade -y
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
 if command -v mintupdate-cli &> /dev/null; then
-    echo -e "\n${GREEN}$(t mintupdate)${NC}"
     sudo mintupdate-cli upgrade -y 2>/dev/null
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
 if command -v flatpak &> /dev/null; then
-    echo -e "\n${GREEN}$(t flatpak_update)${NC}"
     flatpak update -y
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
 update_cinnamon_spices
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_UPDATE"
 
 if command -v fwupdmgr &> /dev/null; then
-    echo -e "\n${GREEN}$(t firmware_section)${NC}"
-    echo -e "${GREEN}$(t firmware_refresh)${NC}"
     sudo fwupdmgr refresh --force 2>/dev/null
-    echo -e "${GREEN}$(t firmware_check)${NC}"
     sudo fwupdmgr get-updates 2>/dev/null
-    echo -e "${GREEN}$(t firmware_apply)${NC}"
     sudo fwupdmgr update -y 2>/dev/null
-    echo -e "${YELLOW}$(t firmware_reboot)${NC}"
-else
-    echo -e "\n${YELLOW}$(t firmware_absent)${NC}"
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "\n${BLUE}$(t phase1)${NC}"
-
-echo -e "${GREEN}$(t autoremove)${NC}"
+# ---------------------------------------------------------------
+# PHASE: SYSTEM CLEANUP (SUDO)
+# ---------------------------------------------------------------
 sudo apt-get autoremove --purge -y
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
 if command -v deborphan &> /dev/null; then
-    echo -e "${GREEN}$(t deborphan)${NC}"
     sudo apt-get purge $(deborphan) -y 2>/dev/null
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "${GREEN}$(t apt_keys)${NC}"
 sudo apt-key net-update 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "${GREEN}$(t apt_clean)${NC}"
 sudo apt-get autoclean
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "${GREEN}$(t ppa_clean)${NC}"
 sudo find /etc/apt/sources.list.d/ -type f -name "*.save" -delete
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
 if command -v flatpak &> /dev/null; then
-    echo -e "${GREEN}$(t flatpak_clean_system)${NC}"
     sudo flatpak uninstall --unused --system -y
     sudo flatpak uninstall --unused --delete-data -y 2>/dev/null
     sudo flatpak repair --system
 
     USED_REMOTES=$(flatpak list --columns=origin 2>/dev/null | sort -u)
     ALL_REMOTES=$(flatpak remotes --columns=name 2>/dev/null)
-
     while IFS= read -r remote; do
         if [ -n "$remote" ] && ! echo "$USED_REMOTES" | grep -qx "$remote"; then
-            echo -e "${YELLOW}$(t flatpak_remote_removed) $remote${NC}"
             sudo flatpak remote-delete --force "$remote" 2>/dev/null
         fi
     done <<< "$ALL_REMOTES"
@@ -311,52 +250,47 @@ if command -v flatpak &> /dev/null; then
     sudo find /var/lib/flatpak -name "*.tmp" -delete 2>/dev/null
     sudo rm -f /var/lib/flatpak/history 2>/dev/null
 
-    echo -e "${GREEN}$(t flatpak_orphan_system)${NC}"
     INSTALLED_FLATPAKS=$(flatpak list --app --columns=application 2>/dev/null)
     if [ -d "/var/app" ]; then
         for app_dir in /var/app/*; do
             if [ -d "$app_dir" ]; then
                 app_id=$(basename "$app_dir")
                 if ! echo "$INSTALLED_FLATPAKS" | grep -qx "$app_id"; then
-                    echo -e "${YELLOW}$(t flatpak_orphan_removed_system) $app_id${NC}"
                     sudo rm -rf "$app_dir"
                 fi
             fi
         done
     fi
-else
-    echo -e "${YELLOW}$(t flatpak_absent)${NC}"
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "${GREEN}$(t journal_clean)${NC}"
 sudo journalctl --vacuum-time=7d
 sudo find /var/log -type f -name "*.gz" -mtime +7 -delete
 sudo find /var/log -type f -name "*.1" -delete
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "${GREEN}$(t tmp_clean)${NC}"
 sudo find /tmp -type f -atime +3 -delete 2>/dev/null
 sudo find /var/tmp -type f -atime +3 -delete 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "${GREEN}$(t kernel_clean)${NC}"
 if command -v mintsystem &> /dev/null; then
     sudo mintsystem removekernels 2>/dev/null
 else
     CURRENT_KERNEL=$(uname -r)
     KERNEL_PACKAGES=$(dpkg -l | grep -E 'linux-image-[0-9]' | awk '{print $2}' | grep -v "$CURRENT_KERNEL")
     if [ -n "$KERNEL_PACKAGES" ]; then
-        echo "$(t kernel_removing) $KERNEL_PACKAGES"
         sudo apt-get purge $KERNEL_PACKAGES -y
-    else
-        echo "$(t kernel_current_only)"
+        REBOOT_NEEDED=true
     fi
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_SYS"
 
-echo -e "${GREEN}$(t grub_update)${NC}"
 sudo update-grub 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
-echo -e "\n${BLUE}$(t phase2)${NC}"
-
-echo -e "${GREEN}$(t cache_clean)${NC}"
+# ---------------------------------------------------------------
+# PHASE: USER CLEANUP
+# ---------------------------------------------------------------
 find ~/.cache -type f -atime +14 \
     ! -path "*/mozilla/*" \
     ! -path "*/google-chrome/*" \
@@ -364,65 +298,66 @@ find ~/.cache -type f -atime +14 \
     ! -path "*/BraveSoftware/*" \
     ! -path "*/opera/*" \
     -delete 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
-echo -e "${GREEN}$(t thumbnails_clean)${NC}"
 find ~/.cache/thumbnails -type f -atime +7 -delete 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
-echo -e "${GREEN}$(t cinnamon_nemo_clean)${NC}"
 rm -rf ~/.cache/cinnamon/* 2>/dev/null
 rm -rf ~/.cache/nemo/* 2>/dev/null
 rm -rf ~/.local/share/cinnamon/spices-cache/* 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
 if command -v flatpak &> /dev/null; then
-    echo -e "${GREEN}$(t flatpak_user_clean)${NC}"
     flatpak uninstall --unused --user -y
     flatpak uninstall --unused --delete-data -y 2>/dev/null || flatpak uninstall --delete-data -y 2>/dev/null
     rm -rf ~/.local/share/flatpak/repo/tmp/* 2>/dev/null
     rm -f ~/.local/share/flatpak/history 2>/dev/null
 
-    echo -e "${GREEN}$(t flatpak_orphan_user)${NC}"
     INSTALLED_FLATPAKS=$(flatpak list --app --columns=application 2>/dev/null)
     if [ -d "$HOME/.var/app" ]; then
         for app_dir in "$HOME/.var/app"/*; do
             if [ -d "$app_dir" ]; then
                 app_id=$(basename "$app_dir")
                 if ! echo "$INSTALLED_FLATPAKS" | grep -qx "$app_id"; then
-                    echo -e "${YELLOW}$(t flatpak_orphan_removed_user) $app_id${NC}"
                     rm -rf "$app_dir"
                 fi
             fi
         done
     fi
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
-echo -e "${GREEN}$(t fontcache)${NC}"
 fc-cache -fv
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_CLEAN_USER"
 
-echo -e "${GREEN}$(t virtmanager_clean)${NC}"
 USER_ID=$(id -u)
 if [ -S "/run/user/$USER_ID/bus" ]; then
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID/bus" dconf reset /org/virt-manager/virt-manager/urls/isos 2>/dev/null
-    echo -e "${GREEN}$(t dconf_done)${NC}"
 fi
 rm -rf "$HOME/.cache/virt-manager" 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_RESTART"
 
-echo -e "${GREEN}$(t nemo_restart)${NC}"
 nemo -q 2>/dev/null
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_RESTART"
 
-kill $SUDO_KEEP_ALIVE_PID 2>/dev/null
-echo -e "\n${BLUE}$(t title1)${NC}"
-echo -e "${GREEN}$(t done_title)${NC}"
-echo -e "${BLUE}$(t title1)${NC}"
-
-echo -e "\n${GREEN}$(t checking_state)${NC}"
+# ---------------------------------------------------------------
+# PHASE: RESTART CHECK
+# ---------------------------------------------------------------
 if [ -f /var/run/reboot-required ]; then
-    echo -e "\n${RED}******************************************************${NC}"
-    echo -e "${RED}$(t reboot_warn)${NC}"
-    echo -e "${YELLOW}$(t reboot_recommend)${NC}"
-    echo -e "${RED}******************************************************${NC}\n"
-else
-    echo -e "${GREEN}$(t reboot_not_required)${NC}"
+    REBOOT_NEEDED=true
 fi
+STEP=$((STEP+1)); show_progress $STEP $TOTAL_STEPS "$MSG_PHASE_RESTART"
 
-echo -e "$(t press_enter)"
-read -r
+kill "$SUDO_KEEP_ALIVE_PID" 2>/dev/null
+
+echo -e "\n" >&3
+echo -e "${GREEN}======================================================${NC}" >&3
+echo -e "${GREEN}${MSG_DONE}${NC}" >&3
+echo -e "${GREEN}======================================================${NC}" >&3
+
+if [ "$REBOOT_NEEDED" = true ]; then
+    echo -e "${YELLOW}${MSG_RESTART_WARN}${NC}" >&3
+else
+    echo -e "${GREEN}${MSG_NO_RESTART}${NC}" >&3
+fi
