@@ -265,7 +265,7 @@ show_progress 1 $TOTAL_STEPS "$MSG_PHASE_1"
 
 wait_for_apt
 safe_apt_update
-for pkg in curl wget gnupg pciutils; do
+for pkg in curl wget gnupg pciutils dconf-cli; do
     sudo apt-get install -yq "$pkg" || true
 done
 sudo mkdir -p /etc/apt/keyrings
@@ -327,7 +327,7 @@ show_progress 4 $TOTAL_STEPS "$MSG_PHASE_2"
 wait_for_apt
 PACKAGES_INSTALL=(
     google-chrome-stable brave-origin gmic mixxx kdenlive gimp soundconverter
-    vim dconf-editor dconf-cli hunspell-pl bleachbit profile-sync-daemon git build-essential
+    vim dconf-editor hunspell-pl bleachbit profile-sync-daemon git build-essential
     unrar-free mc btrfs-progs exfatprogs ntfs-3g os-prober
     adb fastboot fsarchiver inxi pv rsync p7zip-full makeself zenity innoextract needrestart flatpak timeshift
     python3-defusedxml python3-packaging python3-pip python3-tqdm
