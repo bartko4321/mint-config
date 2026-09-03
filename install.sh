@@ -531,11 +531,6 @@ sudo journalctl --vacuum-time=2d || true
 sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub || true
 sudo update-grub || true
 
-if [[ -d "$SCRIPT_DIR/bleachbit" ]]; then
-    sudo mkdir -p /root/.config/bleachbit
-    sudo cp -af "$SCRIPT_DIR/bleachbit/." /root/.config/bleachbit/
-fi
-
 show_progress 10 $TOTAL_STEPS "$MSG_PHASE_3"
 
 sudo mkdir -p /etc/NetworkManager/conf.d
