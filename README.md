@@ -44,6 +44,8 @@ Sets up Zsh + Oh My Zsh + Powerlevel10k (if `zsh` is present) using the detected
 
 ---
 
+🚀 How to Run
+
 1: Clone the repository or download the files
 ```bash
 git clone https://github.com/syscore88/mint-config.git
