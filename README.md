@@ -1,60 +1,52 @@
-# 🚀 Linux Mint : Comprehensive Configuration Script
+# 🌿 Linux Mint Post-Install Setup Script
 
-An automated, powerful Bash script designed to transform a clean **Linux Mint** installation with a complete, optimized workstation ready for both work and entertainment.
+A comprehensive, automated Bash post-installation script for **Linux Mint**. It configures APT repositories (including `universe`/`multiverse` and several third-party sources), self-heals broken/unreachable APT sources, detects your GPU and installs matching drivers/32-bit libraries, installs a large curated set of system/multimedia/gaming packages via APT/PPAs/Flatpak/standalone `.deb` files, configures virtualization (libvirt/QEMU) and the firewall, tweaks the GRUB timeout, and sets up Zsh with Oh My Zsh and Powerlevel10k.
 
-
----
-
-## ✨ Main Features
-
-The script performs a full system deployment divided into several logical stages:
-
-### ⚙️ 1. Repositories & Updates
-* Enables the `i386` architecture (required for games and Wine).
-* Extends repositories with `contrib` and `non-free` components on the underlying Ubuntu/Debian base (using the standard `sources.list` format; Mint's own repositories are left untouched).
-* Adds official repositories for external applications: **Google Chrome** and **Brave Browser**.
-* Activates the **Flathub** repository (Flatpak) — useful since Mint ships with the Software Manager but not Flathub enabled by default.
-* Safely waits for APT locks held by other system processes (including the Mint Update Manager / `mintupdate`) to be released.
-
-### 🎮 2. Gaming, Drivers & Wine
-* **Smart GPU Detection:** Automatically identifies your graphics card (NVIDIA / AMD / Intel) and installs dedicated 32-bit libraries, adding the appropriate modules to `initramfs` (forcing early KMS loading for smooth booting).
-* For NVIDIA cards, offers to use Mint's built-in `driver-manager` / `mintdrivers` in addition to manual driver installation.
-* Installs the latest stable version of **Wine** along with 32-bit audio libraries (PulseAudio, OpenAL).
-* Automatically downloads and configures the latest version of **Winetricks**.
-* Installs useful gaming tools: `gamemode`, `mangohud`, `vulkan-tools`, `vkd3d-compiler`, `goverlay`.
-
-### 📦 3. Package Management
-* **Debloat:** Removes unnecessary or rarely used pre-installed Mint applications (e.g. Hypnotix, Drawing, Celluloid, Pix, Mint Welcome Screen — kept optional/skippable per app).
-* **Everyday tools installation:** Over 40 hand-picked packages (including VLC/GStreamer, Telegram, QBitTorrent, Kdenlive, Audacity, Krita, Vim, Fastfetch, BleachBit, rsync, 7zip, and many more).
-* **Hardware detection:** Automatically installs missing firmware using `isenkram`.
-* Automatically downloads the latest `.deb` packages from designated GitHub releases (e.g. Discord, faugus-launcher, ls-fg).
-
-### 🔒 4. Virtualization & Firewall
-* Installs and configures the **QEMU/KVM** virtualization environment and **Virt-Manager**.
-* Automatically adds the current user to the `libvirt`, `libvirt-qemu`, and `kvm` groups.
-* Configures and enables **UFW** (via Mint's `gufw` front-end where available) — blocks incoming traffic by default, allows outgoing, and opens the necessary ports for the virtualization network bridge (`virbr0`).
-
-### 🐚 5. Modern Shell (ZSH)
-* Sets **ZSH** as the default user shell.
-* Installs the **Oh My ZSH** framework in unattended mode.
-* Downloads and activates the powerful **Powerlevel10k** theme.
-* Adds automatic `fastfetch` invocation on terminal startup and enforces correct UTF-8 encoding.
-
-### ⚡ 6. System Optimizations
-* Enables regular SSD trimming via `fstrim.timer`.
-* Clears old systemd system logs (`journalctl --vacuum-time=2d`).
-* Sets the GRUB menu timeout to `0` seconds (instant boot).
-* Configures fast and secure DNS servers (Cloudflare `1.1.1.1`) directly in the active **NetworkManager** configuration (same networking stack as on KDE — Mint uses `nm-applet`/`cinnamon-settings` on top of it).
+The script auto-detects the system language (Polish/English) from the `LANG`/`LC_ALL` locale, and separately detects the best available system **locale** (falling back to `en_US.UTF-8` if the detected one isn't installed) for later Zsh configuration.
 
 ---
 
-## 🚀 How to Run
+## 🚀 Script Features
 
-The script **cannot** be run directly from the `root` account (via `su` or `sudo ./install.sh`). Run it as a regular user with `sudo` privileges. The script will ask for your password once, then temporarily remove the password requirement for installation processes to run uninterrupted.
+- **Temporary Passwordless Sudo**: Requests the admin password once at the start, then configures a temporary `NOPASSWD` rule (via `/etc/sudoers.d/`, or a `polkit`/`run0` rule on systems without `visudo`) so the rest of the script can run unattended. The rule is automatically removed at the end.
+- **`wait_for_apt` Locking Helper**: Stops PackageKit and waits for any existing APT/dpkg locks to clear before every package operation.
+- **Self-Healing APT Updates (`safe_apt_update`)**: Runs `apt-get update`, and if it fails, parses the error output (in several languages) for the broken repository URLs, removes the matching `sources.list.d` entries automatically, and retries the update — so one bad third-party repo doesn't block the whole script.
+- **APT Repository Setup**: Comments out the CD-ROM source, enables the `i386` architecture, enables the `universe`/`multiverse` components, and adds the official **Google Chrome** and **Brave Browser** APT repositories with their signing keys (Brave's key import is verified before the repo is actually added).
+- **`add_ppa_and_install` Helper**: Adds a PPA, updates, and installs the given packages; if the install fails, it automatically removes the PPA again and refreshes APT, so a broken PPA doesn't leave the system in a bad repo state. Used for Telegram, Fastfetch, HandBrake (with a direct-package fallback), and CDEmu.
+- **Package Installation**: Installs a large curated `PACKAGES_INSTALL` set covering browsers (Chrome, Brave), media/creative apps (GIMP, Kdenlive, Mixxx, SoundConverter...), dev tools (`gcc`, `cmake`, `meson`, `ninja-build`, `build-essential`...), and the gaming stack (`gamemode`, `mangohud`, `vkd3d-compiler`, `goverlay`, `winetricks`, `vulkan-tools`) — falling back to installing packages one-by-one (with per-package logs) if the bulk install fails.
+- **GPU Detection & Driver Setup**: Detects NVIDIA/AMD/Intel GPUs via `lspci`, installs matching 32-bit Mesa/Vulkan libraries (or the matching `libnvidia-gl-<branch>:i386` package, auto-detected from the installed NVIDIA driver version), adds the right kernel modules to `/etc/initramfs-tools/modules`, installs matching Linux kernel headers, and rebuilds the initramfs.
+- **Flatpak & Standalone `.deb` Packages**: Adds the Flathub remote and installs Flatseal + Gear Lever; downloads and installs Discord and `ls-fg`/`ls-fg-vk` directly as `.deb` files (Discord from its official download endpoint, the others via the GitHub Releases API); installs Faugus Launcher via its PPA.
+- **Virtualization & Firewall**: Installs `virt-manager`, `qemu-system`, `libvirt-daemon-system`, `ovmf`, and related tools; imports default `virt-manager` GUI preferences via `dconf load`; enables `libvirtd`/`virtqemud`; defines/starts/autostarts the default libvirt NAT network; resets and configures **UFW** (deny incoming by default, allow `virbr0` traffic and the libvirt subnet, and allow SSH only if an SSH server is actually detected running); adds the user to the `libvirt`/`libvirt-qemu`/`kvm` groups.
+- **System Tuning & DNS**: Sets `GRUB_TIMEOUT=0` and regenerates the GRUB config; enables `fstrim.timer`; vacuums the journal to 2 days; sets Cloudflare (`1.1.1.1`/`1.0.0.1` + IPv6) as the system and NetworkManager DNS, applies it to the active connection, and waits (up to 10s) for DNS resolution to confirm connectivity before continuing.
+- **Shell Setup**: If `zsh` is available, sets it as the default shell, installs Oh My Zsh (unattended) and the Powerlevel10k theme, and updates `~/.zshrc` (theme, plugins, the detected system locale, `fastfetch` on login, syntax-highlighting/autosuggestions sourcing).
+- **Dotfiles & Config Copy**: Copies an optional `.update.sh` helper script plus `.local`/`.config` directories from the script folder into the user's home directory.
+- **Progress Bar & Logging**: Displays a live progress bar across 4 phases / 12 steps. On failure, a detailed log is saved to `~/install_error_<timestamp>.log`.
+- **Optional Reboot Prompt**: Asks **"Do you want to restart the system now? [Y/N]"** at the end instead of forcing a reboot.
+
+---
+
+## 🔍 Module Details
+
+### 1. Preparation & Repositories
+Copies dotfiles, grants temporary `NOPASSWD` sudo, enables `i386`/`universe`/`multiverse`, adds the Google Chrome and Brave repositories (with key verification), runs a self-healing `apt-get update` + upgrade, and installs `linux-firmware`.
+
+### 2. Package & Flatpak Installation
+Installs the curated system package set (falling back to per-package installation on bulk failure), sets up Flathub, and installs Telegram, Fastfetch, HandBrake, and CDEmu via their respective PPAs (each with automatic rollback on failure).
+
+### 3. GPU Drivers & Standalone Packages
+Detects the GPU vendor(s), installs matching 32-bit driver packages and kernel modules, rebuilds the initramfs, installs matching kernel headers, then downloads and installs Discord/`ls-fg`/`ls-fg-vk` as standalone `.deb`s and Faugus Launcher via PPA.
+
+### 4. Virtualization, Firewall, GRUB & DNS
+Installs and configures `virt-manager`/QEMU/libvirt with a default NAT network and imported GUI preferences, locks down the firewall with UFW while allowing libvirt traffic (and SSH only if a server is running), sets a zero-second GRUB timeout, and configures + verifies Cloudflare DNS.
+
+### 5. Shell & Finalization
+Sets up Zsh + Oh My Zsh + Powerlevel10k (if `zsh` is present) using the detected system locale, removes the temporary sudo/polkit rule, and prompts the user to reboot immediately or exit without rebooting.
+
+---
 
 ### Step 1: Clone the repository or download the files
 ```bash
-git clone https://github.com/syscore88/mint-config.git
+git clone https://gitlab.com/syscore88/mint-config.git
 ```
 
 ### Step 2: Enter the downloaded folder
@@ -72,7 +64,7 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Once the process is complete, the computer will restart automatically. After logging in, you'll be greeted by a fully configured ZSH environment and a customized Cinnamon desktop!
+---
 
 ### ☕ Support the Project
 
@@ -85,4 +77,12 @@ If you find this tool helpful and it saved you some time, consider buying me a c
 If you find this project useful, leave a star! ⭐
 
 ---
-_This script was created to minimize system setup time after a clean installation. Use at your own risk!_
+
+## ⚠️ Requirements & Notes
+
+- A base **Linux Mint** installation with `apt` and an internet connection (packages come from the official repos, several PPAs, Google/Brave repos, Flathub, and GitHub releases).
+- `sudo` access for the current user.
+- The following optional files, placed alongside `install.sh`, are picked up automatically if present: `.update.sh`, `.local/`, `.config/`.
+- Unlike some sibling scripts in this family, this version does **not** remove any pre-installed bloatware apps (`PACKAGES_REMOVE` is empty) and does **not** set a Plymouth boot-splash theme — it only adjusts the GRUB timeout.
+- The script **installs a large number of packages** across several PPAs and **modifies the firewall to deny incoming traffic by default** — review `PACKAGES_INSTALL` and the UFW rules before running if that doesn't match your needs.
+- On failure, check the generated `install_error_<timestamp>.log` file in your home directory for details.
