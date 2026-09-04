@@ -65,6 +65,7 @@ chmod +x install.sh
 ```bash
 ./install.sh
 ```
+---
 
 ### ☕ Support the Project
 
